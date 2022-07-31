@@ -59,9 +59,11 @@ when the end of file is reached or else the offset of the earliest raw
 data blob is reached.
 
 Each line of a member header string is a single keys/value pair in the
-following format:
+following format (where things in {} are placeholders).
 
-<key in utf-8>:<value in utf-8>
+```
+{key in utf-8}:{value in utf-8}
+```
 
 Keys are arbitrary sequences of unicode utf-8 code-points that don't
 contain U+003A). All of the "standard" keys (i.e., defined in this
@@ -69,9 +71,9 @@ document) are 7-bit ASCII printable characters (a subset of unicode
 utf-8).
 
 Values are either base-16 encoded integers (using lower-case digits
-"a" through "f" possibly with a leading "-" and then possibly with a
-leading "0" digits) or are meant to be treated as utf-8 strings (for
-example to hold the file-name).
+"a" through "f" possibly with a leading "-" and then possibly with one
+or more leading "0" digits) or are meant to be treated as utf-8
+strings (for example to hold the file-name).
 
 When parsing values to integers, readers should handle at least all
 numbers representable in a 64bit 2's complement signed number (so up
@@ -81,7 +83,7 @@ unless they are simply preserving an incoming header).
 
 Each member header must contain the size: key/value pair as well as
 one of the following key/value pairs: file-name:, id:, or
-external-file-name:. size: is requires even when it is simply zero.
+external-file-name:. size: is requires even when it is zero.
 
 Here is a nearly full set of well-known keys with some sample values:
 
@@ -105,7 +107,7 @@ size:18d6
 start:f000
 ```
 
-(Additional well know keys not shown are id:, for-file-name:, and
+(Additional well known keys not shown are id:, for-file-name:, and
 external-file-name:)
 
 This isn't a fully valid header because we aren't showing the encoded
@@ -130,9 +132,8 @@ non-standard metadata that are specific to certain applications. Tools
 should preserve this metadata unless the user requests they be
 removed.
 
-It is illegal to repeat a key in a header (and this is not used for
-any standars key). Instead, a format such as x-my-key/0:, x-my-key/1,
-etc. can be used when that is truly needed.
+It is illegal to repeat a key in a header. Instead, a format such as
+x-my-key/0:, x-my-key/1, etc. can be used when that is truly needed.
 
 ### Member Data Format
 
@@ -141,8 +142,8 @@ and don't necessarily need to be in the same order as the
 headers. These are located using the "start" offset (relative to the
 begining of the file). Technically when the same exact data contents
 with the same alignment we could point at the same raw data from
-different headers, then the raw data could be emitted only once but
-processing tools are allowed to duplicate these when say combining
+different member headers, then the raw data could be emitted only once
+but processing tools are allowed to duplicate these when say combining
 archives and current libraries don't try to explicitly handle this
 case.
 
@@ -178,10 +179,11 @@ is limited to a specific file in the archive.
 
 When a header is describing such a metadata blob, it should omit the
 "file-name:" key/value and use "id:" instead (and possibly the
-for-file-name: key/value). Since the value of the id may be used when
-the user wants to extract these meta-data blobs to the file system (in
-a sub-directory called archive-metadata). The inline meta-data for
-such blobs is written to archive-metadata/archive-headers/<id>)
+for-file-name: key). Since the value of the id may be used when the
+user wants to extract these meta-data blobs to the file system for
+examination, etc., they should probably kept human readable. The
+inline meta-data for such blobs is by default written to
+archive-metadata/{id} or archive-metadata/{for-file-name}/{id}).
 
 When this binary metadata is about a particular file in the archive,
 the key "for-file-name:" can be used. In this case the id: might be
@@ -198,8 +200,8 @@ application specific metadata.
 
 ## Versions
 
-The car format allows multiple members with the same file-name *as
-long as they *all* have version numbers and these are all distinct. By
+The car format allows multiple members with the same file-name as long
+as they *all* have version numbers and these are all distinct. By
 default, the highest versioned member should be "returned" when
 requesting a member by name without an explicit version number.
 
@@ -214,22 +216,20 @@ the version: field must not be present.
 
 # Standard Keys
 
-Most keys are optional or only required when other another field is
-set.
+Most keys are optional or only required when another field is set.
 
 ## align:
 
-The alignment in hexidecimal as in 2^A. "1" is the defalut alignment
-and simply means byte aligned. "3" would mean 8 byte/ 64bit alignment,
-and "c" would mean 4096 byte alignment. Aligning on page boundaries
-make core archive physically larger but makes memory mapping
-individual raw data member easier.
+The alignment in hexidecimal (Y) as in 2^Y. Y=1 is the defalut
+alignment and simply means byte aligned. Y=3 would mean 8 byte/64bit
+alignment, and Y=c would mean 4096 byte alignment. Aligning on page
+boundaries make core archive physically larger but makes memory
+mapping individual raw data member easier.
 
 ## data-compression-algorithm: and data-size:
 
 When either is present, both must be set and additionally size: should
-be set and > 0 (since compression is not required when the size is
-zero).
+be set and > 0 (since compression is useless when the size is zero).
 
 The most widely supported format is application/gzip and all but the
 simplest libraries should support it.
@@ -247,9 +247,10 @@ after extraction (or can check them by default).
 Only one of file-name:, id:, and external-file-name: should be
 set. When id: is set, the for-file-name: field can also be set.
 
-file-name: is actual meant to specify a full file-path using either
-the default path-seperator character "/" or another path seperator
-character sequence such as "\" (for example on windows).
+file-name: is meant to specify an absolute or relative full file-path
+and name using either the default path-seperator character "/" or
+another path seperator character sequence such as "\" (for example on
+windows).
 
 ## file-version:
 
@@ -264,11 +265,10 @@ extract the highest version of a file.
 
 ## mime-type:
 
-This field is required to set when id: is used though encouraged
-whenever for other members too when that type may be useful. For
-example, if a core-archive represents a binary library file and has
-embedded data that can be accessed at run-time, the mime-type: may be
-useful.
+This field is required when id: is used though encouraged for other
+members too. For example, if a core-archive represents a binary
+library file and has embedded data that can be accessed at run-time,
+the mime-type: may be useful.
 
 When used for indexes, tools may support mapping of a mime-type: to
 another tool which can recompute binary metadata once the archive is
@@ -332,8 +332,9 @@ archive file is larger than 2^64 bytes.
 ## start:
 
 This is the offset relative to the begining of the file stored as a
-positive hexidecimal number. See size: to understand why these may
-often be encoded with left padded "0" digits to simplify writers.
+positive hexidecimal number. start: is required when size: > 0. See
+size: to understand why these may often be encoded with left padded
+"0" digits to simplify writers.
 
 # Discussion
 
@@ -356,7 +357,7 @@ probably be less than about 16 bytes per member (or 32 bytes per
 member when the total core archive is larger than 2^32 bytes).
 
 I considered a different format for values, namely, C/Java/Javascript
-style strings using "\" as an escape sequence (and of course
+style strings using U+005C as an escape sequence (and of course
 supporting \uXXXX to retain full unicode support). That would have
 required more logic in all the libraries that process these values. I
 also considered making header key/value strings actual unix style
@@ -382,7 +383,6 @@ ready for prime-time.
 # Conclusion
 
 The Core Archive File Format is a proposal for a "universal" and
-extensible archive format that is extremely easy to produce and almost
-as easy to read. Alignment and padding makes it suitable for use with
-memory mapped files.
-
+extensible archive format that is extremely easy to produce and
+consume. Alignment and padding makes it suitable for use with memory
+mapped files.
