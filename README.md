@@ -3,12 +3,12 @@
 The "car" file format (MIME type application/x-core-archive), is a
 redesign of the (various) "ar" formats and "car" uses fully human
 readable variable length member headers rather than a format partially
-designed just to be "easy" for C to handle format.
+designed just to be "easy" for C to handle.
 
-Member headers are used to metadata about the file contents such as
-the size (required), filename, and other metadata normally associated
-with an individual file in a file system and of course the raw data
-content of each member.
+Member headers are used to store metadata about the file contents such
+as the size (required), filename, and other metadata normally
+associated with an individual file in a file system and of course the
+raw data content of each member.
 
 The core archive file format supports:
 
@@ -31,60 +31,57 @@ shell scripts and of course other languages.
 A "car" file is a sequence of "members" (where usually but not always
 a member represents a file).
 
-Each member has a human readable header followed by a binary blob of
-data of zero or more bytes (the size of the blob comes from the
-"size:" key/value pair in the header).
+Each member has a human readable header followed by an optional binary
+blob of data (the size of the blob comes from the "size:" key/value
+pair in the header, see below).
 
 The format is simple enough that it's sometimes legal to simply "cat"
 together "car" files to create an archive that combines the
-content. (Since this may violate some constraints, particularly around
-alignment, it is not recommended but hackers are going to do what
-hackers do...)
+content. [Since this may violate some constraints, particularly around
+alignment, it is not recommended and there will be a command line tool
+to do this properly.]
 
-Unlike "ar" files, "car" files do not currently have a magic
-number. (Maybe they should and it could look like "car: 1\n" for
-example.)
+Unlike "ar" files, "car" files do not have a magic number.
 
 ### Member Header Format
 
-The header is a series of unix style utf-8 encoded lines (each line
-ends with U+000A) that finally end in at least one "empty" line (so
-two U+000A characters in a row).
+The header is a series of utf-8 encoded lines (though each line ends
+in U+0000 instead of U+000A, i.e., these are actually null terminated
+strings).
 
-Additional newlines are some times used as padding bytes to reach the
-alignment for the begining of the data when the alignment is not 1
-(the default)).
+The header ends when a blank line is encountered (which practically
+means that there will be at least two U+0000 in a row since a header
+must have at least one initial line to hold the size: field).
 
-There isn't a mechanism to force alignment of headers (the "ar" format
-aligns headers and data to 16bit boundaries which seems pretty useless
-since the natural alignment for 64bit machines would be 8 byte
-boundaries).
+Additional bytes containing U+0000 are some times appended to the
+header as padding bytes to reach the alignment for the begining of the
+data when the alignment is not 1).
 
-[I am very tempted to say that the default alignment should actually
-be 8 bytes.]
+While there is no mechanism to force the alignment of a header, if
+every header specifies page boundaries for the data then all of the
+headers will be aligned to page bounaries as well.
 
-Each unix style line of a member header is a single keys/value pair in
-the following format:
+(For comparison, the "ar" format aligns headers and data to 16bit
+boundaries which seems pretty useless since the natural alignment for
+64bit machines would be 8 byte boundaries).
 
-<key in utf-8>: <value in utf-8>\n
+Each line of a member header is a single keys/value pair in the
+following format:
+
+<key in utf-8>: <value in utf-8>U+0000
 
 The space (U+0020) following the ":" (U+003A) is *required* and only
-one space is *allowed* after the ":". (BTW, in my opinion, library
-implementations should not expose either the U+003A or U+0020 directly
-to clients.)
+one space is *allowed* after the ":".
 
 Keys are arbitrary sequences of unicode utf-8 characters that don't
-contain U+0000, U+000A, U+0020, or U+003A). All of the "standard" keys
-(i.e., defined in this document) are 7-bit ASCII printable characters
-(a subset of unicode utf-8). These very minimal restrictions on keys
-and impose zero restrictions on the utility of the format.
+contain U+0000, U+0020, or U+003A). All of the "standard" keys (i.e.,
+defined in this document) are 7-bit ASCII printable characters (a
+subset of unicode utf-8).
 
 Values are either base-10 integers (possibly with a leading "-") or
 are meant to be treated as utf-8 strings (for example to hold the file
-name metadata). Neither U+0000 or U+000A are not currently allowed in
-the values associated with a key. These minimal restrictions *do* have
-an impact on the utility of the format (particularly relevant to
-file-names, see below).
+name metadata). U+0000 is the only unicode character not allowed in a
+value string.
 
 When parsing values to integers, readers should handle all numbers
 representable in a 64bit 2's complement signed number (so up to 2^63
@@ -93,10 +90,11 @@ and down to -2^63). "-0" should always be considred to just be zero
 they are simply preserving an incoming header).
 
 The only key that *must* be present in the header is "size:" even
-though a size zero is legal if there are no data contents. Even when
-there is a zero length data component, a header must still be right
-padded to the alignment from the header using \n (U+000A) after the
-blank line that is required to indicate the end of the header).
+though a size zero is legal if there are no data contents for this
+member. Even when there is a zero length data component, a header must
+still be right padded to the alignment from the header using (U+0000)
+after the blank line that is required to indicate the end of the
+header.
 
 Here is a nearly full set of well-known keys with some sample values:
 
@@ -119,6 +117,9 @@ posix-owner-id: 100
 posix-owner-name: jawilson
 size: 1876
 ```
+
+(Additional well know keys not shown are for-file-name:,
+is-binary-metadata, and external-file-name:)
 
 This isn't a fully valid header because it *doesn't end in a blank
 line* but otherwise I hope this should give a clear sense of how
@@ -146,7 +147,7 @@ removed.
 It is sometimes legal to repeat keys with different values. For the
 standard keys defined above, the first key value pair should be used
 and for those keys, other key value pairs with the same key can be
-dropped.
+dropped or ignored by tools.
 
 It is *recommended* that alignment *not* be set for compressed members
 (or simply specify the default "align: 1\n").
@@ -200,7 +201,7 @@ is limited to specific files in the archive.
 
 When a header is describing such a metadata blob, it can omit the
 "file-name:" key (unless there is a well-defined name for it already)
-and add the line "is-binary-metadata: true\n" so other tools know this
+and add the line "is-binary-metadata: true" so other tools know this
 data doesn't necessarily need to be extracted when the archive is
 "extracted" to the file system.
 
@@ -241,27 +242,19 @@ indicate a warning condition).
 contents are empty and are expected to be found in the file-system
 (somehow).
 
-For core archives, one merely needs to set size: to 0 and add
-"is-lite: true\n" to the header though the "ar" equivalent format
-*requires* that all such members are lite (and changes the magic
-number).
-
-TODO(jawilson): maybe add external-file-name: ?
+For core archives, one merely needs to set size: to 0 and use
+external-file-name: for a member instead of file-name:. Simple, right?
 
 # Discussion
 
 core archive files will likely have a slightly larger foot-print than
 "ar" files because of the uncompressed fully human readable member
-headers ("ar" also does not compress it's headers and because of their
-fixed size, they have caused great confusion regarding long file names
-and unicode characters in file names).
+headers ("ar" headers are fixed size and because of this they have
+caused great confusion regarding long file names and unicode
+characters in file names).
 
-The only unicode code-points that aren't allowed in file names (and
-other values) are U+0000 and U+000A. A quick Google search suggests
-that U+000A is in fact allowed in file-names on some operating
-systems. I have several solutions to this problem (for example
-allowing U+0000 to act as a "quote" character much like "\" in C
-string literals).
+The only unicode code-point that isn't allowed in file names is
+U+0000.
 
 Consideration was made for using LEB128, especially for size headers,
 rather than base 10 human readable strings. Since an LEB128 encoded
@@ -273,11 +266,12 @@ defined binary encoded metadata however.
 
 I considered a different format for values, namely, C/Java/Javascript
 style strings using "\" as an escape sequence (and of course
-supporting \uXXXX to retain full unicode support).
+supporting \uXXXX to retain full unicode support). That would have
+required more logic in all the libraries that process these values.
 
 I'm still considering a required archive header (which could then also
 contain a magic number) and potentially list features that a tool must
-support to manipulate the "car" file.
+support to manipulate a particular "car" file.
 
 # Deterministic Builds
 
@@ -285,13 +279,13 @@ If a core archive file is the output of a build step and the input to
 another build step then it may be desireable to omit lots of useful
 but irrelevant metadata and instead rely on the "data-hash-algorithm"
 and the "data-hash" fields instead of say the posix information,
-especially "posix-modification-time".
+especially "posix-modification-time" and the user/group information.
 
 # Implementations
 
 The first generator of a "car" file will likely be a bash script that
-uses expected binaries on a unix/linux implementation to generate a
-legal "car" file.
+uses expected binaries like echo on a unix/linux implementation to
+generate a legal "car" file.
 
 We'll update the this list of implementations once more are ready for
 prime-time.
@@ -306,45 +300,7 @@ reclaim space once the "car" file is closed.
 
 Since "car" files are meant to be written once, and accessed multiple
 times, a tool could place an index as the first member of the the
-"car" file to vastly speed up random access.
-
-# Test Suite
-
-TBD.
-
-Some of the most interesting cases, such as handling archives larger
-than 32bits may not be practical to provide as raw data.
-
-# Pull Requests
-
-I plan to implement a very basic bash version of a tool to create
-archives and extract them. It will not have the capability of deleting
-members, etc. This will serves as a proof of concept.
-
-I also plan to create a Java library that will read and write "car"
-files. The API will likely be intentionally similar to how Java
-handles ".zip" files (the actual format of ".jar" files, Java's
-"library" format) though I honestly don't know right now.
-
-I also plan to create a Go library that will read and write "car"
-files and eventually a full command line tool like /usr/bin/ar.
-
-I'd also like to eventually create a C library that can read and write
-"car" files.
-
-However, that will still leave many languages without a native library
-that can manipulate "car" files. The point of a general purpose
-archive format is that they can be universally used (without resorting
-to putting them into the file-system or invoke external binaries and I
-will be very interested in help from expert coders in other languages.
-
-A FUSE file-system would be a very interesting so that a "car" file
-could be "mounted".
-
-# COFF
-
-While researching "ar", I came across some indications that COFF and
-"ar" are related.
+"car" file to vastly speed up random access to individual files.
 
 # Conclusion
 
