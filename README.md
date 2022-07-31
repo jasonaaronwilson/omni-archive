@@ -351,7 +351,7 @@ binary search may be possible directly on the headers when an entire
 core-archive is in memory (for example, memory-mapped or embedded in
 an executable).
 
-Consideration was made for using unsigned LEB128 to encode number
+Consideration was made for using unsigned ULEB128 to encode number
 fields inside of the header key/value strings but the saving would
 probably be less than about 16 bytes per member (or 32 bytes per
 member when the total core archive is larger than 2^32 bytes).
@@ -363,7 +363,7 @@ required more logic in all the libraries that process these values. I
 also considered making header key/value strings actual unix style
 lines (i.e., ending in U+000A) and then simply ending them with
 U+0000. It turns out both values are valid as file-names (at least on
-some systems) and hence the LEB128 length prefix was ultimately
+some systems) and hence the ULEB128 length prefix was ultimately
 decided on to allow no limitations on file-names except being valid
 utf-8.
 
