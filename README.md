@@ -16,7 +16,7 @@ The core archive file format supports:
 1. aligning raw data (for example to 64-bits or page sizes)
 2. checksums on the raw data (to detect corruption)
 3. data compression of the raw data
-4. unlimited utf-8 file-names
+4. unlimited length utf-8 file-names
 5. posix file metadata
 6. simple application specific metadata extensions
 7. application specific binary meta-data such as indexes, symbol
@@ -82,7 +82,7 @@ be zero (though implementations should *never* emit "-0" on purpose
 unless they are simply preserving an incoming header).
 
 Each member header must contain the size: key/value pair as well as
-one of the following key/value pairs: file-name:, id:, or
+one of the following key/value pairs: file-name:, metadata-name:, or
 external-file-name:. size: is requires even when it is zero.
 
 Here is a nearly full set of well-known keys with some sample values:
@@ -107,8 +107,9 @@ size:18d6
 start:f000
 ```
 
-(Additional well known keys not shown are id:, for-file-name:, and
-external-file-name:)
+(Additional well known keys not shown are metadata-name:, for-file-name:, and
+external-file-name: which would have been illegal to set in this
+example)
 
 This isn't a fully valid header because we aren't showing the encoded
 string lengths of each string and strings don't actually end in a
@@ -118,14 +119,6 @@ obviously meant to be somewhat human readable.
 
 TODO(jawilson): file ACLs and other file metadata? Data from MacOS or
 Windows?
-
-When a data-compression-algorithm is used, data-size: gives us the
-uncompressed length and data-size: must only be set when
-data-compression-algorithm: is also set.
-
-The data-hash: should always be computed before compression (that way
-we can tell if the data compression algorithm actually preserved the
-underlying data or not).
 
 Keys that begin with "x-" are meant to be used for header inlined
 non-standard metadata that are specific to certain applications. Tools
@@ -178,7 +171,7 @@ binary format that either describes the entire archive file itself or
 is limited to a specific file in the archive.
 
 When a header is describing such a metadata blob, it should omit the
-"file-name:" key/value and use "id:" instead (and possibly the
+"file-name:" key/value and use "metadata-name:" instead (and possibly the
 for-file-name: key). Since the value of the id may be used when the
 user wants to extract these meta-data blobs to the file system for
 examination, etc., they should probably kept human readable. The
@@ -186,7 +179,7 @@ inline meta-data for such blobs is by default written to
 archive-metadata/{id} or archive-metadata/{for-file-name}/{id}).
 
 When this binary metadata is about a particular file in the archive,
-the key "for-file-name:" can be used. In this case the id: might be
+the key "for-file-name:" can be used. In this case the metadata-name: might be
 though as a "type" of meta-data.
 
 The size: attribute must still be set as always and the mime-type:
@@ -228,8 +221,11 @@ mapping individual raw data member easier.
 
 ## data-compression-algorithm: and data-size:
 
-When either is present, both must be set and additionally size: should
-be set and > 0 (since compression is useless when the size is zero).
+When either is present, both must be set. Additionally size: should be
+present and > 0 (since compression is useless when the size is zero).
+
+data-size: gives us the uncompressed length and data-size: must only
+be set when data-compression-algorithm: is also set.
 
 The most widely supported format is application/gzip and all but the
 simplest libraries should support it.
@@ -242,10 +238,14 @@ Many readers can ignore these when reading though command line tools
 that unarhive should provid a command line option for checking these
 after extraction (or can check them by default).
 
-## file-name:, external-file-name:, id:, for-file-name:, and path-seperator:
+The data-hash: should always be computed before compression (that way
+we can tell if the data compression algorithm actually preserved the
+underlying data or not).
 
-Only one of file-name:, id:, and external-file-name: should be
-set. When id: is set, the for-file-name: field can also be set.
+## file-name:, external-file-name:, metadata-name:, for-file-name:, and path-seperator:
+
+Only one of file-name:, metadata-name:, and external-file-name: should be
+set. When metadata-name: is set, the for-file-name: field can also be set.
 
 file-name: is meant to specify an absolute or relative full file-path
 and name using either the default path-seperator character "/" or
@@ -265,10 +265,10 @@ extract the highest version of a file.
 
 ## mime-type:
 
-This field is required when id: is used though encouraged for other
-members too. For example, if a core-archive represents a binary
-library file and has embedded data that can be accessed at run-time,
-the mime-type: may be useful.
+This field is required when metadata-name: is used though encouraged
+for other members too. For example, if a core-archive represents a
+binary library file and has embedded data that can be accessed at
+run-time, the mime-type: may be useful.
 
 When used for indexes, tools may support mapping of a mime-type: to
 another tool which can recompute binary metadata once the archive is
