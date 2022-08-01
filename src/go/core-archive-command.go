@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 )
@@ -15,7 +16,7 @@ const (
 //
 // Assign START_PROPERTY to all members
 //
-func layout(headers []map[string]string) {
+func layout_archive(headers []map[string]string) {
 	header_size := 0
 	for _, member := range headers {
 		member[START_PROPERTY] = "00000000"
@@ -23,6 +24,9 @@ func layout(headers []map[string]string) {
 	}
 	start := int64(header_size)
 	for _, member := range headers {
+		if start > (1 << 31) {
+			panic("archive is currently to too large")
+		}
 		member[START_PROPERTY] = fmt.Sprintf("%08x", start)
 		start += as_int64(member[SIZE_PROPERTY])
 	}
@@ -64,10 +68,55 @@ func create(args []string) {
 		headers = append(headers, header)
 	}
 
-	layout(headers)
+	layout_archive(headers)
+	write_archive(archive_name, headers)
+}
 
+func write_archive(archive_name string, headers []map[string]string) {
+	/* Open the output file */
+	fo, err := os.Create("output.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	/* First write all of the headers */
 	for _, member := range headers {
-		fmt.Println(header_to_string(member))
+		if _, err := fo.Write(header_to_bytes(member)); err != nil {
+			panic(err)
+		}
+	}
+
+	/* Now write all of the raw data contents */
+	for _, member := range headers {
+		write_file_contents(fo, member[NAME_PROPERTY])
+	}
+
+	/* Close the output file */
+	if err := fo.Close(); err != nil {
+		panic(err)
+	}
+}
+
+func write_file_contents(fo *os.File, filename string) {
+	fi, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	buf := make([]byte, 4096)
+	for {
+		n, err := fi.Read(buf)
+		if err != nil && err != io.EOF {
+			panic(err)
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := fo.Write(buf[:n]); err != nil {
+			panic(err)
+		}
+	}
+	if err := fi.Close(); err != nil {
+		panic(err)
 	}
 }
 
@@ -94,7 +143,25 @@ func attribute_to_bytes(key string, value string) []byte {
 	result := []byte{}
 	result = append(result, []byte(key)...)
 	result = append(result, []byte(value)...)
+	result = append(uleb128(int64(len(result))), result...)
 	return result
+}
+
+func uleb128(number int64) []byte {
+	result := []byte{}
+	for {
+		var b byte = byte(number & 0x7f)
+		number = number >> 7
+		more := number > 0
+		if more {
+			b |= (1 << 7)
+		}
+		result = append(result, b)
+		if more {
+			continue
+		}
+		return result
+	}
 }
 
 func usage() {
