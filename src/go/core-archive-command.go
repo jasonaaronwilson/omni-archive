@@ -9,13 +9,38 @@ import (
 	"strings"
 )
 
-// These are the only KEYs we can explicitly read and write though
-// when appending archives, we keep all of the key/value pairs in
-// entries.
+// These are the only keys we can explicitly read and write though
+// when appending archives, we preserve all of the key/value pairs
+// even if they are not known.
 const (
 	FILE_NAME_KEY = "file-name:"
 	SIZE_KEY      = "size:"
 	START_KEY     = "start:"
+)
+
+// These are additional "known keys" from the spec
+const (
+	ALIGN_KEY                           = "align:"
+	DATA_COMPRESSION_ALGORITHM_KEY      = "data-compression-algorithm:"
+	DATA_HASH_ALGORITHM_KEY             = "data-hash-algorithm:"
+	DATA_HASH_KEY                       = "data-hash:"
+	DATA_SIZE_KEY                       = "data-size:"
+	EXTERNAL_FILE_NAME_KEY              = "external-file-name:"
+	FILE_VERSION_KEY                    = "file-version:"
+	FOR_FILE_NAME_KEY                   = "for-file-name:"
+	METADATA_NAME_KEY                   = "metadata-name:"
+	MIME_VERSION_KEY                    = "mime-version:"
+	POSIX_FILE_MODE_KEY                 = "posix-file-mode:"
+	POSIX_GROUP_NAME_KEY                = "posix-group-name:"
+	POSIX_GROUP_NUMBER_KEY              = "posix-group-number:"
+	POSIX_MODIFICATION_TIME_NANOS_KEY   = "posix-modification-time-nanos:"
+	POSIX_MODIFICATION_TIME_SECONDS_KEY = "posix-modification-time-seconds:"
+	POSIX_OWNER_NAME_KEY                = "posix-owner-name:"
+	POSIX_OWNER_NUMBER_KEY              = "posix-owner-number:"
+)
+
+const (
+	USER_DEFINED_KEY_PREFIX = "x-"
 )
 
 func create_command(args []string) {
