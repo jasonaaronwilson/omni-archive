@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	NAME_PROPERTY  = "file-name:"
-	SIZE_PROPERTY  = "size:"
-	START_PROPERTY = "start:"
+	FILE_NAME_KEY = "file-name:"
+	SIZE_KEY      = "size:"
+	START_KEY     = "start:"
 )
 
 func create_command(args []string) {
@@ -23,7 +23,7 @@ func create_command(args []string) {
 	for _, member := range files {
 		fmt.Println("Adding " + member)
 		header := make(map[string]string)
-		header[NAME_PROPERTY] = member
+		header[FILE_NAME_KEY] = member
 
 		fi, err := os.Stat(member)
 		if err != nil {
@@ -34,7 +34,7 @@ func create_command(args []string) {
 			panic("Can't handle directories yet")
 		}
 
-		header[SIZE_PROPERTY] = fmt.Sprintf("%x", fi.Size())
+		header[SIZE_KEY] = fmt.Sprintf("%x", fi.Size())
 
 		headers = append(headers, header)
 	}
@@ -58,7 +58,7 @@ func extract_files_command(args []string) {
 	// Now extract each file
 
 	// TODO(jawilson): organize headers into a map of headers off
-	// the key NAME_PROPERTY so this isn't O(N^2) where N is the
+	// the key FILE_NAME_KEY so this isn't O(N^2) where N is the
 	// number of headers
 
 	for _, filename := range files {
@@ -68,8 +68,8 @@ func extract_files_command(args []string) {
 		}
 		write_from_file_offset(archive,
 			filename,
-			as_int64(header[START_PROPERTY]),
-			as_int64(header[SIZE_PROPERTY]))
+			as_int64(header[START_KEY]),
+			as_int64(header[SIZE_KEY]))
 	}
 
 	if err := archive.Close(); err != nil {
@@ -79,7 +79,7 @@ func extract_files_command(args []string) {
 
 func find_header(headers []map[string]string, filename string) map[string]string {
 	for _, header := range headers {
-		if header[NAME_PROPERTY] == filename {
+		if header[FILE_NAME_KEY] == filename {
 			return header
 		}
 	}
@@ -87,13 +87,15 @@ func find_header(headers []map[string]string, filename string) map[string]string
 }
 
 //
-// Assign START_PROPERTY to all members
+// Assign START_KEY to all members
 //
 func layout_archive(headers []map[string]string) {
 	header_size := 0
 	for _, member := range headers {
-		member[START_PROPERTY] = "00000000"
-		header_size += len(header_to_bytes(member))
+		if as_int64(member[SIZE_KEY]) > 0 {
+			member[START_KEY] = "00000000"
+			header_size += len(header_to_bytes(member))
+		}
 	}
 	header_size += 1
 	start := int64(header_size)
@@ -101,8 +103,10 @@ func layout_archive(headers []map[string]string) {
 		if start > (1 << 31) {
 			panic("archive is currently to too large")
 		}
-		member[START_PROPERTY] = fmt.Sprintf("%08x", start)
-		start += as_int64(member[SIZE_PROPERTY])
+		if as_int64(member[SIZE_KEY]) > 0 {
+			member[START_KEY] = fmt.Sprintf("%08x", start)
+			start += as_int64(member[SIZE_KEY])
+		}
 	}
 }
 
@@ -135,7 +139,9 @@ func write_archive(archive_name string, headers []map[string]string) {
 
 	/* Now write all of the raw data contents */
 	for _, member := range headers {
-		write_file_contents(fo, member[NAME_PROPERTY])
+		if as_int64(member[SIZE_KEY]) > 0 {
+			write_file_contents(fo, member[FILE_NAME_KEY])
+		}
 	}
 
 	/* Close the output file */
