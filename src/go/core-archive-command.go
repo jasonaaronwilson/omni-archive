@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// These are the only KEYs we can explicitly read and write though
+// when appending archives, we keep all of the key/value pairs in
+// entries.
 const (
 	FILE_NAME_KEY = "file-name:"
 	SIZE_KEY      = "size:"
@@ -22,6 +25,7 @@ func create_command(args []string) {
 	headers := []map[string]string{}
 
 	for _, member := range files {
+		// TODO(jawilson): verbosity and write to standard error
 		fmt.Println("Adding " + member)
 		header := make(map[string]string)
 		header[FILE_NAME_KEY] = member
@@ -40,7 +44,6 @@ func create_command(args []string) {
 		headers = append(headers, header)
 	}
 
-	layout_archive(headers)
 	write_archive(archive_name, headers)
 }
 
@@ -88,7 +91,25 @@ func find_header(headers []map[string]string, filename string) map[string]string
 }
 
 //
-// Assign START_KEY to all members
+// Assign START_KEY values to all members with non-zero size.
+//
+// For every member with non-zero size, we need to set a value for
+// "start:" such that their raw contents don't overlap (or overlap
+// with a header) and of course to do this without any wasted space
+// (modulo alignment which is currently not supported).
+//
+// Of course we don't really know where the first file should start
+// without computing the size of all of the headers and that presents
+// a problem since the size is technically a variable width
+// quantity. To work around this, we first compute the size of all of
+// the headers using a fixed width size string (00000000) and then as
+// long as the actual writing also left pads the hexidecimal size to
+// the same number of digits then we know how big the header is. We
+// also need to add one since we always add a blank "header" according
+// to the specification (this makes is much easier to determine where
+// the last header is).
+//
+// TODO(jawilson): handle alignment.
 //
 func layout_archive(headers []map[string]string) {
 	header_size := 0
@@ -98,6 +119,9 @@ func layout_archive(headers []map[string]string) {
 			header_size += len(header_to_bytes(member))
 		}
 	}
+	// We always write an extra 0 byte after the headers (which
+	// reads as an empty header) and this tells a reader where the
+	// end of the headers is.
 	header_size += 1
 	start := int64(header_size)
 	for _, member := range headers {
@@ -111,6 +135,8 @@ func layout_archive(headers []map[string]string) {
 	}
 }
 
+// Convert a possibly zero prefixed hexidecimal number to and int64 or
+// panic.
 func as_int64(value string) int64 {
 	num, err := strconv.ParseInt(value, 16, 64)
 	if err != nil {
@@ -119,7 +145,18 @@ func as_int64(value string) int64 {
 	return num
 }
 
+//
+// Given an output archive filename and a set of headers (which must
+// include the sizes of all written elements), writes an archive file
+// by first laying out the archive, then writing all of the headers,
+// and then finally writing all of the files contents (currently all
+// read from disk which wont' work nicely when trying to append
+// archives).
+//
 func write_archive(archive_name string, headers []map[string]string) {
+	/* First we need to figure out where everything goes */
+	layout_archive(headers)
+
 	/* Open the output file */
 	fo, err := os.Create(archive_name)
 	if err != nil {
@@ -151,7 +188,9 @@ func write_archive(archive_name string, headers []map[string]string) {
 	}
 }
 
-func write_file_contents(fo *os.File, filename string) {
+// Opens the file "filename" and simply appends all of its bytes to
+// "output".
+func write_file_contents(output *os.File, filename string) {
 	fi, err := os.Open(filename)
 	if err != nil {
 		panic(err)
@@ -165,7 +204,7 @@ func write_file_contents(fo *os.File, filename string) {
 		if n == 0 {
 			break
 		}
-		if _, err := fo.Write(buf[:n]); err != nil {
+		if _, err := output.Write(buf[:n]); err != nil {
 			panic(err)
 		}
 	}
@@ -174,6 +213,10 @@ func write_file_contents(fo *os.File, filename string) {
 	}
 }
 
+//
+// This is a debugging routine that creates a textual version of a
+// header to show a user.
+//
 func header_to_string(header map[string]string) string {
 	result := ""
 	for key, value := range header {
@@ -184,16 +227,26 @@ func header_to_string(header map[string]string) string {
 	return result
 }
 
+//
+// This actually converts a header to its representation of a header
+// which is a series of ULEB128 length prefixed utf-8 strings that
+// happen to all start with with the regexp ".*:".
+//
+// A header always ends with a byte of zero which is an empty string
+// and this routine always emits such an empty line.
+//
 func header_to_bytes(header map[string]string) []byte {
 	result := []byte{}
 	for key, value := range header {
-		result = append(result, attribute_to_bytes(key, value)...)
+		result = append(result, key_value_pair_to_bytes(key, value)...)
 	}
 	result = append(result, 0)
 	return result
 }
 
-func attribute_to_bytes(key string, value string) []byte {
+// TODO(jawilson): this should create a single byte of zero if both
+// key and value are empty.
+func key_value_pair_to_bytes(key string, value string) []byte {
 	result := []byte{}
 	result = append(result, []byte(key)...)
 	result = append(result, []byte(value)...)
@@ -201,6 +254,9 @@ func attribute_to_bytes(key string, value string) []byte {
 	return result
 }
 
+// Encode an int64 as bytes according to the common definition (see
+// wikipedia) of an unsigned LEB128 number. This should result in
+// between 1 and 10 bytes.
 func uleb128(number int64) []byte {
 	result := []byte{}
 	for {
@@ -218,6 +274,13 @@ func uleb128(number int64) []byte {
 	}
 }
 
+// Read sequences of ULEB128 prefixed strings into a sequence of
+// "header" objects (i.e. map[string]string). Each header stops when
+// we encounter a single terminating zero byte (aka, empty "line")
+// that isn't itself the terminator for a header. While all header
+// sequences end in 0x0, 0x0, this may not be the first such
+// appearance of two zeros in a row (for example, a degenerate
+// filename with two U+0000 characters in a row).
 func read_headers(archive *os.File) []map[string]string {
 	result := []map[string]string{}
 	// end := int64(^uint64(0) >> 1)
@@ -232,6 +295,12 @@ func read_headers(archive *os.File) []map[string]string {
 	return result
 }
 
+// Read a sequence of ULEB128 prefixed strings until we encounter an
+// empty string. Convert all non-empty strings into a
+// map[string]string where keys are all unicode characters preceding
+// and including the first ":" and values are the rest of the string.
+// This requires that the contents of a string be legal UTF-8, that
+// there exists at least one ":" in each non empty line.
 func read_header(archive *os.File) map[string]string {
 	result := make(map[string]string)
 	for {
@@ -245,6 +314,9 @@ func read_header(archive *os.File) map[string]string {
 	return result
 }
 
+// This low-level routine reads an unsigned LEB128 from the current
+// file and then reads that many bytes and converts those bytes to a
+// proper legal unicode string.
 func read_uleb128_prefixed_string(archive *os.File) string {
 	str_length := read_uleb128(archive)
 	str_bytes := make([]byte, str_length)
@@ -258,10 +330,18 @@ func read_uleb128_prefixed_string(archive *os.File) string {
 	return string(str_bytes)
 }
 
+// This low-level routine reads an unsigned LEB128 from the current
+// file and returns it as an int64. Since LEB128 is only used to
+// encode header strings, any value larger than about 4096 is probably
+// fishy (hence int64 being a total over-kill despite "128" in the
+// name.
 func read_uleb128(archive *os.File) int64 {
 	result := int64(0)
 	shift := 0
 	for {
+		if shift >= 32 {
+			panic("Encountered a ridicuously long ULEB128 string length")
+		}
 		b := read_byte(archive)
 		result |= int64((b & 0x7f)) << shift
 		if b&(1<<7) == 0 {
@@ -273,6 +353,8 @@ func read_uleb128(archive *os.File) int64 {
 	return result
 }
 
+// Reads a single byte that must be present and panic if any errors
+// occur
 func read_byte(archive *os.File) byte {
 	barray := make([]byte, 1)
 	n, err := archive.Read(barray)
@@ -285,6 +367,7 @@ func read_byte(archive *os.File) byte {
 	return barray[0]
 }
 
+// Reads a single byte and panics if any errors occur
 func write_byte(archive *os.File, b byte) {
 	barray := []byte{b}
 	n, err := archive.Write(barray)
@@ -296,6 +379,13 @@ func write_byte(archive *os.File, b byte) {
 	}
 }
 
+// Attempts to materialize in the filesystem as "filename" the bytes
+// from "start" to "start+size" from an archive.
+//
+// TODO(jawilson): various posix information that should be preserved
+// as well.
+//
+// TODO(jawilson): read and write in larger chunks than one byte!
 func write_from_file_offset(input *os.File, filename string, start int64, size int64) {
 	offset, err := input.Seek(start, 0)
 	if offset != start {
@@ -321,6 +411,13 @@ func write_from_file_offset(input *os.File, filename string, start int64, size i
 	}
 }
 
+// In order to write this file-name, ensure that all of its parent
+// directories exist.
+//
+// TODO(jawilson): do we need to get posix info from the archive itself?
+//
+// TODO(jawilson): cache directories we know exist to avoid repeated
+// calls to os.Stat which could be slow
 func create_parent_directories(filename string) {
 	dir_path := filepath.Dir(filename)
 	if _, err := os.Stat(dir_path); os.IsNotExist(err) {
@@ -332,6 +429,7 @@ func create_parent_directories(filename string) {
 	}
 }
 
+// Output the usage for this tool.
 func usage() {
 	fmt.Println(`Usage:    
 core-archive create {core-archive-filename} [filenames...]
@@ -346,13 +444,14 @@ core-archive --usage
 core-archive --version`)
 }
 
+// Obviously the entry point to this tool.
 func main() {
 	if len(os.Args) <= 1 {
 		usage()
 		return
 	}
-	first := os.Args[1]
-	switch first {
+	command := os.Args[1]
+	switch command {
 	case "create":
 		create_command(os.Args[2:])
 	case "extract-files":
