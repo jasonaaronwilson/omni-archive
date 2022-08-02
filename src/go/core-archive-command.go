@@ -107,9 +107,7 @@ func create_command(args []string) {
 	write_archive(archive_name, headers)
 }
 
-// TODO(jawilson): add a function param called predicate that serves
-// as a filter.
-func extract_files_command(args []string) {
+func extract_by_file_name_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
 
@@ -602,8 +600,8 @@ func has_key(ht map[string]string, key string) bool {
 func usage() {
 	fmt.Println(`Usage:    
 core-archive create {core-archive-filename} [filenames...]
-core-archive extract-all {core-archive-filename}
-core-archive extract-files {core-archive-filename} [filenames...]
+core-archive extract {core-archive-filename}
+core-archive extract-by-file-name {core-archive-filename} [filenames...]
 core-archive append [archive 0] [archive 1] ...
 core-archive list [archive 0] [archive 1] ...
 core-archive headers [archive 0] [archive 1] ...
@@ -624,9 +622,9 @@ func main() {
 	switch command {
 	case "create":
 		create_command(command_args)
-	case "extract-files":
-		extract_files_command(command_args)
-	case "extract-all":
+	case "extract-by-file-name":
+		extract_by_file_name_command(command_args)
+	case "extract":
 		extract_all_files_command(command_args)
 	case "list":
 		list_command(command_args)

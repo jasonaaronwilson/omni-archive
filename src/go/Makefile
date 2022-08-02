@@ -14,7 +14,7 @@ test:	build
 	# create a simple archive
 	./core-archive-command create test-output/test.car testdata/file1.txt testdata/file2.txt 
 	# extract by filename
-	(cd test-output && ../core-archive-command extract-files \
+	(cd test-output && ../core-archive-command extract-by-file-name \
 		test.car \
 		testdata/file1.txt \
 		testdata/file2.txt)
@@ -25,7 +25,7 @@ test:	build
 	cmp testdata/golden-list.test test-output/list.test
 	rm -f test-output/testdata/file1.txt test-output/testdata/file2.txt 
 	# test the extract-all command
-	(cd test-output && ../core-archive-command extract-all test.car)
+	(cd test-output && ../core-archive-command extract test.car)
 	cmp testdata/file1.txt test-output/testdata/file1.txt
 	cmp testdata/file2.txt test-output/testdata/file2.txt
 
