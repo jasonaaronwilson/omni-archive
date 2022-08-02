@@ -123,19 +123,14 @@ func extract_files_command(args []string) {
 }
 
 func with_archive(archive_name string, thunk func(*os.File)) {
-	archive := open_archive(archive_name)
-	thunk(archive)
-	if err := archive.Close(); err != nil {
-		panic(err)
-	}
-}
-
-func open_archive(archive_name string) *os.File {
 	archive, err := os.Open(archive_name)
 	if err != nil {
 		panic(err)
 	}
-	return archive
+	thunk(archive)
+	if err := archive.Close(); err != nil {
+		panic(err)
+	}
 }
 
 func find_header(headers []map[string]string, filename string) map[string]string {
