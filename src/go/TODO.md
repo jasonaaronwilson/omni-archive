@@ -17,5 +17,3 @@
 3. unit tests on reading and writing ULEB128?
 4. more efficienty especially on copying from archive to an output
    file which we currently do one bye at a time
-5. the key/value pairs order should be deterministic (so probably just
-   sort on key names)

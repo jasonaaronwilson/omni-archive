@@ -65,7 +65,9 @@ func list_command(args []string) {
 			func(archive *os.File) {
 				headers := read_headers(archive)
 				for _, header := range headers {
-					fmt.Println(header[FILE_NAME_KEY])
+					if has_key(header, FILE_NAME_KEY) {
+						fmt.Println(header[FILE_NAME_KEY])
+					}
 				}
 			})
 	}
@@ -105,6 +107,8 @@ func create_command(args []string) {
 	write_archive(archive_name, headers)
 }
 
+// TODO(jawilson): add a function param called predicate that serves
+// as a filter.
 func extract_files_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
@@ -138,17 +142,21 @@ func extract_files_command(args []string) {
 	}
 }
 
-func with_archive(archive_name string, thunk func(*os.File)) {
+// Call a handler function with the open file representing the named
+// archive. The file is automatically closed when the handler returns
+func with_archive(archive_name string, handler func(*os.File)) {
 	archive, err := os.Open(archive_name)
 	if err != nil {
 		panic(err)
 	}
-	thunk(archive)
+	handler(archive)
 	if err := archive.Close(); err != nil {
 		panic(err)
 	}
 }
 
+// Find the header for a paritcular file. Does not yet handle
+// versioned files.
 func find_header(headers []map[string]string, filename string) map[string]string {
 	for _, header := range headers {
 		if header[FILE_NAME_KEY] == filename {
@@ -162,20 +170,19 @@ func find_header(headers []map[string]string, filename string) map[string]string
 // Assign START_KEY values to all members with non-zero size.
 //
 // For every member with non-zero size, we need to set a value for
-// "start:" such that their raw contents don't overlap (or overlap
-// with a header) and of course to do this without any wasted space
-// (modulo alignment which is currently not supported).
+// "start:" such that their raw contents don't overlap (or of course
+// overlap with a header) while minimizing wasted space.
 //
-// Of course we don't really know where the first file should start
-// without computing the size of all of the headers and that presents
-// a problem since the size is technically a variable width
-// quantity. To work around this, we first compute the size of all of
-// the headers using a fixed width size string (00000000) and then as
-// long as the actual writing also left pads the hexidecimal size to
-// the same number of digits then we know how big the header is. We
-// also need to add one since we always add a blank "header" according
-// to the specification (this makes is much easier to determine where
-// the last header is).
+// We don't really know where the first file should start without
+// computing the size of all of the headers and that presents a
+// problem since the start offset itself is technically a variable
+// width quantity. To work around this, we first compute the size of
+// all of the headers using a fixed width size string (00000000) and
+// then as long as the actual headers when written also left pads the
+// hexidecimal size to the same number of digits then we know how big
+// each header really is. We also need to add one since we always add
+// a blank "header" (a zero byte) according to the specification (this
+// makes is much easier to determine where the last header is).
 //
 // TODO(jawilson): handle alignment.
 //
@@ -562,6 +569,13 @@ func sorted_keys(m map[string]string) []string {
 	sort.Strings(result)
 
 	return result
+}
+
+// Return true if the given key is present in a header (even if it's
+// value is the empty string)
+func has_key(ht map[string]string, key string) bool {
+	_, is_present := ht[key]
+	return is_present
 }
 
 // Output the usage for this tool.
