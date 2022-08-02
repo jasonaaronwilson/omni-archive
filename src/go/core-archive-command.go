@@ -138,6 +138,30 @@ func extract_files_command(args []string) {
 		})
 }
 
+func extract_all_files_command(args []string) {
+	extract_files_by_predicate(args,
+		func(header map[string]string) bool {
+			return has_key(header, FILE_NAME_KEY)
+		})
+}
+
+func extract_files_by_predicate(args []string, predicate func(map[string]string) bool) {
+	for _, archive_name := range args {
+		with_archive(archive_name,
+			func(archive *os.File) {
+				headers := read_headers(archive)
+				for _, header := range headers {
+					if predicate(header) {
+						write_file_from_offset(archive,
+							header[FILE_NAME_KEY],
+							as_int64(header[START_KEY]),
+							as_int64(header[SIZE_KEY]))
+					}
+				}
+			})
+	}
+}
+
 // Call a handler function with the open file representing the named
 // archive. The file is automatically closed when the handler returns
 func with_archive(archive_name string, handler func(*os.File)) {
@@ -602,6 +626,8 @@ func main() {
 		create_command(command_args)
 	case "extract-files":
 		extract_files_command(command_args)
+	case "extract-all":
+		extract_all_files_command(command_args)
 	case "list":
 		list_command(command_args)
 	default:
