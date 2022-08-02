@@ -13,6 +13,53 @@ const (
 	START_PROPERTY = "start:"
 )
 
+func create_command(args []string) {
+	archive_name := args[0]
+	files := args[1:]
+
+	headers := []map[string]string{}
+
+	for _, member := range files {
+		fmt.Println("Adding " + member)
+		header := make(map[string]string)
+		header[NAME_PROPERTY] = member
+
+		fi, err := os.Stat(member)
+		if err != nil {
+			panic(err)
+		}
+
+		if fi.IsDir() {
+			panic("Can't handle directories yet")
+		}
+
+		header[SIZE_PROPERTY] = fmt.Sprintf("%x", fi.Size())
+
+		headers = append(headers, header)
+	}
+
+	layout_archive(headers)
+	write_archive(archive_name, headers)
+}
+
+func extract_files_command(args []string) {
+	archive_name := args[0]
+	files := args[1:]
+	_ = files
+
+	archive, err := os.Open(archive_name)
+	if err != nil {
+		panic(err)
+	}
+
+	members := read_headers(archive)
+	_ = members
+
+	if err := archive.Close(); err != nil {
+		panic(err)
+	}
+}
+
 //
 // Assign START_PROPERTY to all members
 //
@@ -38,38 +85,6 @@ func as_int64(value string) int64 {
 		panic(err)
 	}
 	return num
-}
-
-func create(args []string) {
-	archive_name := args[0]
-	archive_files := args[1:]
-
-	_ = archive_name
-
-	headers := []map[string]string{}
-	_ = headers
-
-	for _, member := range archive_files {
-		fmt.Println("Adding " + member)
-		header := make(map[string]string)
-		header[NAME_PROPERTY] = member
-
-		fi, err := os.Stat(member)
-		if err != nil {
-			panic(err)
-		}
-
-		if fi.IsDir() {
-			panic("Can't handle directories yet")
-		}
-
-		header[SIZE_PROPERTY] = fmt.Sprintf("%x", fi.Size())
-
-		headers = append(headers, header)
-	}
-
-	layout_archive(headers)
-	write_archive(archive_name, headers)
 }
 
 func write_archive(archive_name string, headers []map[string]string) {
@@ -164,6 +179,69 @@ func uleb128(number int64) []byte {
 	}
 }
 
+func read_headers(archive *os.File) []map[string]string {
+	result := []map[string]string{}
+	end := int64(^uint64(0) >> 1)
+	for {
+		read_header(archive)
+		break
+	}
+	_ = end
+	return result
+}
+
+func read_header(archive *os.File) map[string]string {
+	result := make(map[string]string)
+	for {
+		str := read_uleb128_prefixed_string(archive)
+		fmt.Println("Header string is " + str)
+		if len(str) == 0 {
+			break
+		}
+	}
+	return result
+}
+
+func read_uleb128_prefixed_string(archive *os.File) string {
+	str_length := read_uleb128(archive)
+	str_bytes := make([]byte, str_length)
+	n, err := archive.Read(str_bytes)
+	if int64(n) != str_length {
+		panic("Expected to read all the bytes requested")
+	}
+	if err != nil {
+		panic(err)
+	}
+	return string(str_bytes)
+}
+
+func read_uleb128(archive *os.File) int64 {
+	result := int64(0)
+	shift := 0
+	for {
+		b, err := read_byte(archive)
+		if err != nil {
+			panic(err)
+		}
+		result |= int64((b & 0x7f)) << shift
+		if b&(1<<7) == 0 {
+			break
+		}
+		shift += 7
+	}
+	fmt.Printf("uleb128 is %d", result)
+	return result
+}
+
+func read_byte(archive *os.File) (byte, error) {
+	barray := make([]byte, 1)
+	n, err := archive.Read(barray)
+	if n != 1 {
+		panic("Expected to read one byte")
+	}
+	return barray[0], err
+}
+
 func usage() {
 	fmt.Println(`Usage:    
 core-archive create [filenames...]
@@ -182,7 +260,9 @@ func main() {
 	first := os.Args[1]
 	switch first {
 	case "create":
-		create(os.Args[2:])
+		create_command(os.Args[2:])
+	case "extract-files":
+		extract_files_command(os.Args[2:])
 	default:
 		usage()
 	}
