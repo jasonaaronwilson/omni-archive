@@ -113,33 +113,29 @@ func extract_files_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
 
-	archive, err := os.Open(archive_name)
-	if err != nil {
-		panic(err)
-	}
+	with_archive(archive_name,
+		func(archive *os.File) {
 
-	headers := read_headers(archive)
+			headers := read_headers(archive)
 
-	// Now extract each file
+			// Now extract each file
 
-	// TODO(jawilson): organize headers into a map of headers off
-	// the key FILE_NAME_KEY so this isn't O(N^2) where N is the
-	// number of headers
+			// TODO(jawilson): organize headers into a map
+			// of headers off the key FILE_NAME_KEY so
+			// this isn't O(N^2) where N is the number of
+			// headers
 
-	for _, filename := range files {
-		header := find_header(headers, filename)
-		if header == nil {
-			panic("File not found in archive: " + filename)
-		}
-		write_from_file_offset(archive,
-			filename,
-			as_int64(header[START_KEY]),
-			as_int64(header[SIZE_KEY]))
-	}
-
-	if err := archive.Close(); err != nil {
-		panic(err)
-	}
+			for _, filename := range files {
+				header := find_header(headers, filename)
+				if header == nil {
+					panic("File not found in archive: " + filename)
+				}
+				write_from_file_offset(archive,
+					filename,
+					as_int64(header[START_KEY]),
+					as_int64(header[SIZE_KEY]))
+			}
+		})
 }
 
 // Call a handler function with the open file representing the named
