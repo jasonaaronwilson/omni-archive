@@ -387,3 +387,8 @@ The Core Archive File Format is a proposal for a "universal" and
 extensible archive format that is extremely easy to produce and
 consume. Alignment and padding makes it suitable for use with memory
 mapped files.
+
+# TODO(jawilson)
+
+We store directory names so that we make get the exact group, owner,
+and other metadata upon extraction.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -120,7 +121,7 @@ func as_int64(value string) int64 {
 
 func write_archive(archive_name string, headers []map[string]string) {
 	/* Open the output file */
-	fo, err := os.Create("output.txt")
+	fo, err := os.Create(archive_name)
 	if err != nil {
 		panic(err)
 	}
@@ -305,7 +306,8 @@ func write_from_file_offset(input *os.File, filename string, start int64, size i
 	}
 
 	// open output file
-	output, err := os.Create("extract-output.txt")
+	create_parent_directories(filename)
+	output, err := os.Create(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -319,11 +321,22 @@ func write_from_file_offset(input *os.File, filename string, start int64, size i
 	}
 }
 
+func create_parent_directories(filename string) {
+	dir_path := filepath.Dir(filename)
+	if _, err := os.Stat(dir_path); os.IsNotExist(err) {
+		// TODO(jawilson): what should be mode really be?
+		err := os.MkdirAll(dir_path, 0750)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func usage() {
 	fmt.Println(`Usage:    
-core-archive create [filenames...]
-core-archive extract-all [directory]
-core-archive extract-files [directory] [filenames...]
+core-archive create {core-archive-filename} [filenames...]
+core-archive extract-all {core-archive-filename}
+core-archive extract-files {core-archive-filename} [filenames...]
 core-archive append [archive 0] [archive 1] ...
 core-archive list [archive 0] [archive 1] ...
 core-archive headers [archive 0] [archive 1] ...
@@ -334,6 +347,10 @@ core-archive --version`)
 }
 
 func main() {
+	if len(os.Args) <= 1 {
+		usage()
+		return
+	}
 	first := os.Args[1]
 	switch first {
 	case "create":
