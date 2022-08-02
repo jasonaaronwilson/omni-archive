@@ -43,6 +43,20 @@ const (
 	USER_DEFINED_KEY_PREFIX = "x-"
 )
 
+// Read all headers and display the file names contained in a very
+// succinct format.
+func list_command(args []string) {
+	for _, archive_name := range args {
+		archive := open_archive(archive_name)
+		headers := read_headers(archive)
+		// TODO(jawilson): close_archive
+		for _, header := range headers {
+			fmt.Println(header[FILE_NAME_KEY])
+		}
+
+	}
+}
+
 func create_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
@@ -75,7 +89,6 @@ func create_command(args []string) {
 func extract_files_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
-	_ = files
 
 	archive, err := os.Open(archive_name)
 	if err != nil {
@@ -104,6 +117,14 @@ func extract_files_command(args []string) {
 	if err := archive.Close(); err != nil {
 		panic(err)
 	}
+}
+
+func open_archive(archive_name string) *os.File {
+	archive, err := os.Open(archive_name)
+	if err != nil {
+		panic(err)
+	}
+	return archive
 }
 
 func find_header(headers []map[string]string, filename string) map[string]string {
@@ -476,11 +497,14 @@ func main() {
 		return
 	}
 	command := os.Args[1]
+	command_args := os.Args[2:]
 	switch command {
 	case "create":
-		create_command(os.Args[2:])
+		create_command(command_args)
 	case "extract-files":
-		extract_files_command(os.Args[2:])
+		extract_files_command(command_args)
+	case "list":
+		list_command(command_args)
 	default:
 		usage()
 	}

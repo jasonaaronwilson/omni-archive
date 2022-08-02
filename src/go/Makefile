@@ -18,6 +18,10 @@ test:	build
 		testdata/file2.txt)
 	cmp testdata/file1.txt test-output/testdata/file1.txt
 	cmp testdata/file2.txt test-output/testdata/file2.txt
+	./core-archive-command list test-output/test.car > test-output/list.test
+	# The obvious extra "Println"'s in core-archive-command.go
+	#   cause this to fail but it otherwise the output looked good.
+	# cmp testdata/file1.txt test-output/list.test
 
 diff: clean format
 	git difftool
