@@ -43,17 +43,20 @@ const (
 	USER_DEFINED_KEY_PREFIX = "x-"
 )
 
+//
 // Read all headers and display the file names contained in a very
 // succinct format.
+//
 func list_command(args []string) {
 	for _, archive_name := range args {
-		archive := open_archive(archive_name)
-		headers := read_headers(archive)
-		// TODO(jawilson): close_archive
-		for _, header := range headers {
-			fmt.Println(header[FILE_NAME_KEY])
-		}
-
+		with_archive(
+			archive_name,
+			func(archive *os.File) {
+				headers := read_headers(archive)
+				for _, header := range headers {
+					fmt.Println(header[FILE_NAME_KEY])
+				}
+			})
 	}
 }
 
@@ -114,6 +117,14 @@ func extract_files_command(args []string) {
 			as_int64(header[SIZE_KEY]))
 	}
 
+	if err := archive.Close(); err != nil {
+		panic(err)
+	}
+}
+
+func with_archive(archive_name string, thunk func(*os.File)) {
+	archive := open_archive(archive_name)
+	thunk(archive)
 	if err := archive.Close(); err != nil {
 		panic(err)
 	}
