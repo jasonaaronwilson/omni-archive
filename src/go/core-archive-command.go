@@ -40,6 +40,8 @@ const (
 	POSIX_OWNER_NUMBER_KEY              = "posix-owner-number:"
 )
 
+// Application specific keys are prefixed with "x-" as eXtentions
+// keys.
 const (
 	USER_DEFINED_KEY_PREFIX = "x-"
 )
@@ -69,6 +71,10 @@ func list_command(args []string) {
 	}
 }
 
+//
+// This command creates an archive based on the command line
+// arguments.
+//
 func create_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
