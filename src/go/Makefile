@@ -19,7 +19,7 @@ test:	build
 	cmp testdata/file1.txt test-output/testdata/file1.txt
 	cmp testdata/file2.txt test-output/testdata/file2.txt
 
-diff: format
+diff: clean format
 	git difftool
 
 clean:
