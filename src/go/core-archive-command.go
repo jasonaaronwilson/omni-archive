@@ -43,6 +43,14 @@ const (
 	USER_DEFINED_KEY_PREFIX = "x-"
 )
 
+var verbosity uint = 0
+
+const (
+	VERBOSITY_ERROR   = 0 // verbosity is unsigned so errors are always shown
+	VERBOSITY_WARNING = 1
+	VERBOSITY_INFO    = 2
+)
+
 //
 // Read all headers and display the file names contained in a very
 // succinct format.
@@ -67,8 +75,9 @@ func create_command(args []string) {
 	headers := []map[string]string{}
 
 	for _, member := range files {
-		// TODO(jawilson): verbosity and write to standard error
-		fmt.Println("Adding " + member)
+		if verbosity >= VERBOSITY_INFO {
+			fmt.Println("Adding " + member)
+		}
 		header := make(map[string]string)
 		header[FILE_NAME_KEY] = member
 
@@ -341,7 +350,9 @@ func read_headers(archive *os.File) []map[string]string {
 		if len(header) == 0 {
 			break
 		}
-		fmt.Println(header_to_string(header))
+		if verbosity >= VERBOSITY_INFO {
+			fmt.Println(header_to_string(header))
+		}
 		result = append(result, header)
 	}
 	return result
@@ -478,6 +489,44 @@ func create_parent_directories(filename string) {
 		if err != nil {
 			panic(err)
 		}
+	}
+}
+
+//
+// Examine a single header and return non-localized errors and
+// warnings.
+//
+func validate_header(header map[string]string) []string {
+	result := []string{}
+
+	if !is_present(header, SIZE_KEY) {
+		result = append(result, "ERROR: A header does not have the required key -- size:")
+	}
+
+	if is_present(header, ALIGN_KEY) {
+		result = append(result, "WARNING: This tool can doesn't respect alignment")
+	}
+
+	if is_present(header, FILE_VERSION_KEY) {
+		result = append(result, "WARNING: This tool can doesn't handle multiple versions")
+	}
+
+	if is_present(header, DATA_COMPRESSION_ALGORITHM_KEY) !=
+		// bug, should be DATA_SIZE_KEY
+		is_present(header, DATA_COMPRESSION_ALGORITHM_KEY) {
+		result = append(result, "ERROR: FOO and BAR must match")
+	}
+
+	// TODO:(jawilson): validate the layout which obviously can't be done here.
+
+	return result
+}
+
+func is_present(m map[string]string, key string) bool {
+	if _, ok := m[key]; ok {
+		return true
+	} else {
+		return false
 	}
 }
 
