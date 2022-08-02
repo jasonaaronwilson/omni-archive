@@ -130,7 +130,7 @@ func extract_files_command(args []string) {
 				if header == nil {
 					panic("File not found in archive: " + filename)
 				}
-				write_from_file_offset(archive,
+				write_file_from_offset(archive,
 					filename,
 					as_int64(header[START_KEY]),
 					as_int64(header[SIZE_KEY]))
@@ -461,7 +461,7 @@ func write_byte(archive *os.File, b byte) {
 // as well.
 //
 // TODO(jawilson): read and write in larger chunks than one byte!
-func write_from_file_offset(input *os.File, filename string, start int64, size int64) {
+func write_file_from_offset(input *os.File, filename string, start int64, size int64) {
 	offset, err := input.Seek(start, 0)
 	if offset != start {
 		panic("failed to seek to correct position")
