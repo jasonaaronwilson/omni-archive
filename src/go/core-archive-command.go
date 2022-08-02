@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -280,11 +281,12 @@ func write_file_contents(output *os.File, filename string) {
 //
 func header_to_string(header map[string]string) string {
 	result := ""
-	for key, value := range header {
-		result += key
-		result += value
-		result += "\n"
-	}
+	visit_by_sorted_key(header,
+		func(key string, value string) {
+			result += key
+			result += value
+			result += "\n"
+		})
 	return result
 }
 
@@ -298,9 +300,10 @@ func header_to_string(header map[string]string) string {
 //
 func header_to_bytes(header map[string]string) []byte {
 	result := []byte{}
-	for key, value := range header {
-		result = append(result, key_value_pair_to_bytes(key, value)...)
-	}
+	visit_by_sorted_key(header,
+		func(key string, value string) {
+			result = append(result, key_value_pair_to_bytes(key, value)...)
+		})
 	result = append(result, 0)
 	return result
 }
@@ -528,6 +531,31 @@ func is_present(m map[string]string, key string) bool {
 	} else {
 		return false
 	}
+}
+
+//
+// Visit the keys value pairs of this map according to the the
+// "natural" sort order of the keys.
+//
+func visit_by_sorted_key(m map[string]string, visitor func(key string, value string)) {
+	keys := sorted_keys(m)
+	for _, key := range keys {
+		visitor(key, m[key])
+	}
+}
+
+//
+// Returns the keys of a map according to a sort function.
+//
+func sorted_keys(m map[string]string) []string {
+	result := []string{}
+	for key, _ := range m {
+		result = append(result, key)
+	}
+
+	sort.Strings(result)
+
+	return result
 }
 
 // Output the usage for this tool.
