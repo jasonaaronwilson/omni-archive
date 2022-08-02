@@ -42,6 +42,7 @@ Here is a graphic represention:
 [file 1 header]
 [file 2 header size:0]
 [file 3 header]
+[0, i.e., and empty header]
 [zero byte filled padding]
 [file 1 raw data]
 [zero byte filled padding]
