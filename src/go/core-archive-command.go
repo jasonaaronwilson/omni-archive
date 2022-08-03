@@ -74,6 +74,22 @@ func list_command(args []string) {
 }
 
 //
+// Read all headers and then display them in a human readable format
+//
+func headers_command(args []string) {
+	for _, archive_name := range args {
+		with_archive(
+			archive_name,
+			func(archive *os.File) {
+				headers := read_headers(archive)
+				for _, header := range headers {
+					fmt.Println(header_to_string(header))
+				}
+			})
+	}
+}
+
+//
 // This command creates an archive based on the command line
 // arguments.
 //
@@ -602,11 +618,11 @@ func usage() {
 core-archive create {core-archive-filename} [filenames...]
 core-archive extract {core-archive-filename}
 core-archive extract-by-file-name {core-archive-filename} [filenames...]
-core-archive append [archive 0] [archive 1] ...
+TODO core-archive append [archive 0] [archive 1] ...
 core-archive list [archive 0] [archive 1] ...
 core-archive headers [archive 0] [archive 1] ...
-core-archive remove [archive 0] [filenames...]
-core-archive update [filenames...]
+TODO core-archive remove-by-file-name [archive 0] [filenames...]
+TODO core-archive update {core-archive-filename} [filenames...]
 core-archive --usage
 core-archive --version`)
 }
@@ -628,6 +644,8 @@ func main() {
 		extract_all_files_command(command_args)
 	case "list":
 		list_command(command_args)
+	case "headers":
+		headers_command(command_args)
 	default:
 		usage()
 	}
