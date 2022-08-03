@@ -267,32 +267,32 @@ func write_archive(archive_name string, headers []map[string]string) {
 	layout_archive(headers)
 
 	/* Open the output file */
-	fo, err := os.Create(archive_name)
+	output, err := os.Create(archive_name)
 	if err != nil {
 		panic(err)
 	}
 
 	/* First write all of the headers */
 	for _, member := range headers {
-		if _, err := fo.Write(header_to_bytes(member)); err != nil {
+		if _, err := output.Write(header_to_bytes(member)); err != nil {
 			panic(err)
 		}
 	}
 
 	/* Write and empty header / zero byte to signal the end of headers. */
-	if _, err := fo.Write([]byte{0}); err != nil {
+	if _, err := output.Write([]byte{0}); err != nil {
 		panic(err)
 	}
 
 	/* Now write all of the raw data contents */
 	for _, member := range headers {
 		if as_int64(member[SIZE_KEY]) > 0 {
-			write_file_contents(fo, member[FILE_NAME_KEY])
+			write_file_contents(output, member[FILE_NAME_KEY])
 		}
 	}
 
 	/* Close the output file */
-	if err := fo.Close(); err != nil {
+	if err := output.Close(); err != nil {
 		panic(err)
 	}
 }
@@ -300,13 +300,13 @@ func write_archive(archive_name string, headers []map[string]string) {
 // Opens the file "filename" and simply appends all of its bytes to
 // "output".
 func write_file_contents(output *os.File, filename string) {
-	fi, err := os.Open(filename)
+	input, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
 	buf := make([]byte, 4096)
 	for {
-		n, err := fi.Read(buf)
+		n, err := input.Read(buf)
 		if err != nil && err != io.EOF {
 			panic(err)
 		}
@@ -317,7 +317,7 @@ func write_file_contents(output *os.File, filename string) {
 			panic(err)
 		}
 	}
-	if err := fi.Close(); err != nil {
+	if err := input.Close(); err != nil {
 		panic(err)
 	}
 }
