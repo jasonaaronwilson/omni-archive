@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,7 +60,10 @@ type IOInfo struct {
 
 	// A value of zero means do not perform a seek before reading
 	seek_offset int64
-	size        int64
+
+	// For an input, this tells us how many bytes to expect. For
+	// an output, it has no meaning and should be left zero
+	size int64
 }
 
 // type ArchiveMemberInfo struct {
@@ -159,8 +161,10 @@ func extract_by_file_name_command(args []string) {
 				if header == nil {
 					panic("File not found in archive: " + filename)
 				}
-				write_file(
-					filename,
+				copy_bytes(
+					IOInfo{
+						filename: filename,
+					},
 					IOInfo{
 						file:        archive,
 						seek_offset: as_int64(header[START_KEY]),
@@ -184,8 +188,10 @@ func extract_files_by_predicate(args []string, predicate func(map[string]string)
 				headers := read_headers(archive)
 				for _, header := range headers {
 					if predicate(header) {
-						write_file(
-							header[FILE_NAME_KEY],
+						copy_bytes(
+							IOInfo{
+								filename: header[FILE_NAME_KEY],
+							},
 							IOInfo{
 								file:        archive,
 								seek_offset: as_int64(header[START_KEY]),
@@ -308,37 +314,19 @@ func write_archive(archive_name string, headers []map[string]string) {
 	/* Now write all of the raw data contents */
 	for _, member := range headers {
 		if as_int64(member[SIZE_KEY]) > 0 {
-			write_file_contents(output, member[FILE_NAME_KEY])
+			copy_bytes(
+				IOInfo{
+					file: output,
+				},
+				IOInfo{
+					filename: member[FILE_NAME_KEY],
+					size:     as_int64(member[SIZE_KEY]),
+				})
 		}
 	}
 
 	/* Close the output file */
 	if err := output.Close(); err != nil {
-		panic(err)
-	}
-}
-
-// Opens the file "filename" and simply appends all of its bytes to
-// "output".
-func write_file_contents(output *os.File, filename string) {
-	input, err := os.Open(filename)
-	if err != nil {
-		panic(err)
-	}
-	buf := make([]byte, 4096)
-	for {
-		n, err := input.Read(buf)
-		if err != nil && err != io.EOF {
-			panic(err)
-		}
-		if n == 0 {
-			break
-		}
-		if _, err := output.Write(buf[:n]); err != nil {
-			panic(err)
-		}
-	}
-	if err := input.Close(); err != nil {
 		panic(err)
 	}
 }
@@ -520,46 +508,59 @@ func write_byte(archive *os.File, b byte) {
 // as well.
 //
 // TODO(jawilson): read and write in larger chunks than one byte!
-func write_file(filename string, info IOInfo) {
-	var input *os.File
+func copy_bytes(out_info IOInfo, in_info IOInfo) {
 
-	if info.file != nil {
-		input = info.file
+	if verbosity >= VERBOSITY_INFO {
+		fmt.Sprintf("Copy from %s to %s\n", in_info, out_info)
+	}
+
+	var input *os.File
+	var output *os.File
+
+	if in_info.file != nil {
+		input = in_info.file
 	} else {
-		in, err := os.Open(info.filename)
+		in, err := os.Open(in_info.filename)
 		if err != nil {
 			panic(err)
 		}
 		input = in
 	}
 
-	if info.seek_offset > 0 {
-		offset, err := input.Seek(info.seek_offset, 0)
+	if in_info.seek_offset > 0 {
+		offset, err := input.Seek(in_info.seek_offset, 0)
 		if err != nil {
 			panic(err)
 		}
-		if offset != info.seek_offset {
+		if offset != in_info.seek_offset {
 			panic("failed to seek to correct position")
 		}
 	}
 
-	// open output file
-	create_parent_directories(filename)
-	output, err := os.Create(filename)
-	if err != nil {
-		panic(err)
+	if out_info.file != nil {
+		output = out_info.file
+	} else {
+		// open output file
+		create_parent_directories(out_info.filename)
+		output_foo, err := os.Create(out_info.filename)
+		if err != nil {
+			panic(err)
+		}
+		output = output_foo
 	}
 
-	for i := int64(0); i < info.size; i++ {
+	for i := int64(0); i < in_info.size; i++ {
 		write_byte(output, read_byte(input))
 	}
 
-	if err := output.Close(); err != nil {
-		panic(err)
+	if in_info.file == nil {
+		if err := input.Close(); err != nil {
+			panic(err)
+		}
 	}
 
-	if info.file == nil {
-		if err := input.Close(); err != nil {
+	if out_info.file == nil {
+		if err := output.Close(); err != nil {
 			panic(err)
 		}
 	}

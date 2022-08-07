@@ -9,6 +9,7 @@
 5. warn on potential over writing of a file that already exists
 6. detect duplicate filenames and other potential errors. add the
    check-headers command
+7. make sure setting verbosity doesn't make tests fail
 
 # core-archive-lib.go
 
