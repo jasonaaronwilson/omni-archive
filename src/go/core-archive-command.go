@@ -54,6 +54,21 @@ const (
 	VERBOSITY_INFO    = 2
 )
 
+type InputInfo struct {
+	// Only one of input_filename or input_file should be set
+	input_filename string
+	input_file     *os.File
+
+	// A value of zero means do not perform a seek before reading
+	input_seek_offset int64
+	size              int64
+}
+
+// type ArchiveMemberInfo struct {
+//      values      map[string]string
+//      source_info InputInfo
+// }
+
 //
 // Read all headers and display the file names contained in a very
 // succinct format.
@@ -144,10 +159,13 @@ func extract_by_file_name_command(args []string) {
 				if header == nil {
 					panic("File not found in archive: " + filename)
 				}
-				write_file_from_offset(archive,
+				write_file(
 					filename,
-					as_int64(header[START_KEY]),
-					as_int64(header[SIZE_KEY]))
+					InputInfo{
+						input_file:        archive,
+						input_seek_offset: as_int64(header[START_KEY]),
+						size:              as_int64(header[SIZE_KEY]),
+					})
 			}
 		})
 }
@@ -166,10 +184,13 @@ func extract_files_by_predicate(args []string, predicate func(map[string]string)
 				headers := read_headers(archive)
 				for _, header := range headers {
 					if predicate(header) {
-						write_file_from_offset(archive,
+						write_file(
 							header[FILE_NAME_KEY],
-							as_int64(header[START_KEY]),
-							as_int64(header[SIZE_KEY]))
+							InputInfo{
+								input_file:        archive,
+								input_seek_offset: as_int64(header[START_KEY]),
+								size:              as_int64(header[SIZE_KEY]),
+							})
 					}
 				}
 			})
@@ -499,13 +520,27 @@ func write_byte(archive *os.File, b byte) {
 // as well.
 //
 // TODO(jawilson): read and write in larger chunks than one byte!
-func write_file_from_offset(input *os.File, filename string, start int64, size int64) {
-	offset, err := input.Seek(start, 0)
-	if offset != start {
-		panic("failed to seek to correct position")
+func write_file(filename string, info InputInfo) {
+	var input *os.File
+
+	if info.input_file != nil {
+		input = info.input_file
+	} else {
+		in, err := os.Open(info.input_filename)
+		if err != nil {
+			panic(err)
+		}
+		input = in
 	}
-	if err != nil {
-		panic(err)
+
+	if info.input_seek_offset > 0 {
+		offset, err := input.Seek(info.input_seek_offset, 0)
+		if err != nil {
+			panic(err)
+		}
+		if offset != info.input_seek_offset {
+			panic("failed to seek to correct position")
+		}
 	}
 
 	// open output file
@@ -515,12 +550,18 @@ func write_file_from_offset(input *os.File, filename string, start int64, size i
 		panic(err)
 	}
 
-	for i := int64(0); i < size; i++ {
+	for i := int64(0); i < info.size; i++ {
 		write_byte(output, read_byte(input))
 	}
 
 	if err := output.Close(); err != nil {
 		panic(err)
+	}
+
+	if info.input_file == nil {
+		if err := input.Close(); err != nil {
+			panic(err)
+		}
 	}
 }
 
