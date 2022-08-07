@@ -28,6 +28,18 @@ test:	build
 	(cd test-output && ../core-archive-command extract test.car)
 	cmp testdata/file1.txt test-output/testdata/file1.txt
 	cmp testdata/file2.txt test-output/testdata/file2.txt
+	# test the append command
+	./core-archive-command create test-output/test-two.car testdata/file3.txt testdata/file4.txt
+	./core-archive-command append test-output/append.car test-output/test.car test-output/test-two.car
+	rm -f test-output/testdata/file1.txt \
+	      test-output/testdata/file2.txt \
+	      test-output/testdata/file3.txt \
+	      test-output/testdata/file4.txt
+	(cd test-output && ../core-archive-command extract append.car)
+	cmp testdata/file1.txt test-output/testdata/file1.txt
+	cmp testdata/file2.txt test-output/testdata/file2.txt
+	cmp testdata/file3.txt test-output/testdata/file3.txt
+	cmp testdata/file4.txt test-output/testdata/file4.txt
 
 diff: clean format
 	git difftool

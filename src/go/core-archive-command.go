@@ -107,6 +107,48 @@ func headers_command(args []string) {
 }
 
 //
+// This command appends one or more archives.
+//
+func append_command(args []string) {
+	archive_name := args[0]
+	archives := args[1:]
+
+	headers := []map[string]string{}
+	inputs := []IOInfo{}
+	to_close := []*os.File{}
+
+	for _, input_archive_name := range archives {
+		archive, err := os.Open(input_archive_name)
+		if err != nil {
+			panic(err)
+		}
+		to_close = append(to_close, archive)
+		more_headers := read_headers(archive)
+		for _, header := range more_headers {
+			// TODO(jawilson): we can have a header with zero size...
+			// if has_key(header, FILE_NAME_KEY) {
+			// }
+			headers = append(headers, header)
+			inputs = append(inputs,
+				IOInfo{
+					file:        archive,
+					seek_offset: as_int64(header[START_KEY]),
+					size:        as_int64(header[SIZE_KEY]),
+				})
+		}
+	}
+
+	write_archive(archive_name, headers, inputs)
+
+	// Close all of the archives we've opened
+	for _, openFile := range to_close {
+		if err := openFile.Close(); err != nil {
+			panic(err)
+		}
+	}
+}
+
+//
 // This command creates an archive based on the command line
 // arguments.
 //
@@ -682,6 +724,8 @@ func main() {
 	command := os.Args[1]
 	command_args := os.Args[2:]
 	switch command {
+	case "append":
+		append_command(command_args)
 	case "create":
 		create_command(command_args)
 	case "extract-by-file-name":
