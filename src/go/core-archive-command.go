@@ -595,9 +595,7 @@ func copy_bytes(out_info IOInfo, in_info IOInfo) {
 		output = output_foo
 	}
 
-	for i := int64(0); i < in_info.size; i++ {
-		write_byte(output, read_byte(input))
-	}
+	copy_bytes_to_output(output, input, in_info.size)
 
 	if in_info.file == nil {
 		if err := input.Close(); err != nil {
@@ -610,6 +608,17 @@ func copy_bytes(out_info IOInfo, in_info IOInfo) {
 			panic(err)
 		}
 	}
+}
+
+//
+// Copy num_bytes from an input file to an output file as efficiently
+// as possbile.
+//
+func copy_bytes_to_output(output *os.File, input *os.File, num_bytes int64) {
+	for i := int64(0); i < num_bytes; i++ {
+		write_byte(output, read_byte(input))
+	}
+
 }
 
 // In order to write this file-name, ensure that all of its parent
@@ -706,7 +715,7 @@ func usage() {
 core-archive create {core-archive-filename} [filenames...]
 core-archive extract {core-archive-filename}
 core-archive extract-by-file-name {core-archive-filename} [filenames...]
-TODO core-archive append [archive 0] [archive 1] ...
+core-archive append [output archive] [archive 0] ...
 core-archive list [archive 0] [archive 1] ...
 core-archive headers [archive 0] [archive 1] ...
 TODO core-archive remove-by-file-name [archive 0] [filenames...]

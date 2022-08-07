@@ -10,6 +10,8 @@
 6. detect duplicate filenames and other potential errors. add the
    check-headers command
 7. make sure setting verbosity doesn't make tests fail
+8. MAYBE sort headers. the biggest reason to do this is
+   reproducibility but we can potentially achieve this in other ways
 
 # core-archive-lib.go
 
