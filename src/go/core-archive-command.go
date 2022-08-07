@@ -115,6 +115,7 @@ func create_command(args []string) {
 	files := args[1:]
 
 	headers := []map[string]string{}
+	inputs := []IOInfo{}
 
 	for _, member := range files {
 		if verbosity >= VERBOSITY_INFO {
@@ -135,9 +136,15 @@ func create_command(args []string) {
 		header[SIZE_KEY] = fmt.Sprintf("%x", fi.Size())
 
 		headers = append(headers, header)
+		inputs = append(inputs,
+			IOInfo{
+				filename: member,
+				size:     fi.Size(),
+			})
+
 	}
 
-	write_archive(archive_name, headers)
+	write_archive(archive_name, headers, inputs)
 }
 
 func extract_by_file_name_command(args []string) {
@@ -289,7 +296,7 @@ func as_int64(value string) int64 {
 // read from disk which wont' work nicely when trying to append
 // archives).
 //
-func write_archive(archive_name string, headers []map[string]string) {
+func write_archive(archive_name string, headers []map[string]string, inputs []IOInfo) {
 	/* First we need to figure out where everything goes */
 	layout_archive(headers)
 
@@ -312,16 +319,13 @@ func write_archive(archive_name string, headers []map[string]string) {
 	}
 
 	/* Now write all of the raw data contents */
-	for _, member := range headers {
+	for j, member := range headers {
 		if as_int64(member[SIZE_KEY]) > 0 {
 			copy_bytes(
 				IOInfo{
 					file: output,
 				},
-				IOInfo{
-					filename: member[FILE_NAME_KEY],
-					size:     as_int64(member[SIZE_KEY]),
-				})
+				inputs[j])
 		}
 	}
 
