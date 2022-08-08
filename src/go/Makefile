@@ -1,7 +1,7 @@
 all: build
 
 go_binary = /usr/local/go/bin/go
-go_binary = /usr/bin/go
+# go_binary = /usr/bin/go
 
 build: core-archive-command.go
 	${go_binary} build core-archive-command.go
@@ -44,6 +44,10 @@ test:	build
 	(cd test-output && ../core-archive-command remove-by-file-name removed.car append.car testdata/file3.txt)
 	./core-archive-command list test-output/removed.car > test-output/removed-list.test
 	cmp testdata/golden-removed-list.test test-output/removed-list.test
+	# test create archive from a directory
+	./core-archive-command create test-output/all-testdata.car testdata
+	./core-archive-command list test-output/all-testdata.car > test-output/all-list.test
+	cmp testdata/golden-all-list.test test-output/all-list.test
 
 diff: clean format
 	git difftool
@@ -51,6 +55,7 @@ diff: clean format
 clean:
 	rm -rf test-output
 	rm -f *~
+	rm -f testdata/*~
 	rm -f extract-output.txt
 	rm -f output.txt
 	rm -f core-archive-command

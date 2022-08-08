@@ -1,0 +1,7 @@
+testdata/file1.txt
+testdata/file2.txt
+testdata/file3.txt
+testdata/file4.txt
+testdata/golden-all-list.test
+testdata/golden-list.test
+testdata/golden-removed-list.test

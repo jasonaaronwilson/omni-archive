@@ -159,31 +159,33 @@ func create_command(args []string) {
 	headers := []map[string]string{}
 	inputs := []IOInfo{}
 
-	for _, member := range files {
-		if verbosity >= VERBOSITY_INFO {
-			fmt.Println("Adding " + member)
-		}
-		header := make(map[string]string)
-		header[FILE_NAME_KEY] = member
+	for _, root := range files {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				panic(err)
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if verbosity >= VERBOSITY_INFO {
+				fmt.Println("Adding " + path)
+			}
 
-		fi, err := os.Stat(member)
+			header := make(map[string]string)
+			header[FILE_NAME_KEY] = path
+			header[SIZE_KEY] = fmt.Sprintf("%x", info.Size())
+
+			headers = append(headers, header)
+			inputs = append(inputs,
+				IOInfo{
+					filename: path,
+					size:     info.Size(),
+				})
+			return nil
+		})
 		if err != nil {
 			panic(err)
 		}
-
-		if fi.IsDir() {
-			panic("Can't handle directories yet")
-		}
-
-		header[SIZE_KEY] = fmt.Sprintf("%x", fi.Size())
-
-		headers = append(headers, header)
-		inputs = append(inputs,
-			IOInfo{
-				filename: member,
-				size:     fi.Size(),
-			})
-
 	}
 
 	write_archive(archive_name, headers, inputs)
