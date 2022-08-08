@@ -1,6 +1,7 @@
 all: build
 
 go_binary = /usr/local/go/bin/go
+go_binary = /usr/bin/go
 
 build: core-archive-command.go
 	${go_binary} build core-archive-command.go
@@ -40,6 +41,9 @@ test:	build
 	cmp testdata/file2.txt test-output/testdata/file2.txt
 	cmp testdata/file3.txt test-output/testdata/file3.txt
 	cmp testdata/file4.txt test-output/testdata/file4.txt
+	(cd test-output && ../core-archive-command remove-by-file-name removed.car append.car testdata/file3.txt)
+	./core-archive-command list test-output/removed.car > test-output/removed-list.test
+	cmp testdata/golden-removed-list.test test-output/removed-list.test
 
 diff: clean format
 	git difftool

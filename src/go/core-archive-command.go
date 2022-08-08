@@ -189,6 +189,51 @@ func create_command(args []string) {
 	write_archive(archive_name, headers, inputs)
 }
 
+//
+// This command allows the removal of some members from an archive
+//
+func remove_by_filename_command(args []string) {
+	output_archive_name := args[0]
+	input_archive_name := args[1]
+	to_remove_names := args[2:]
+	to_remove_map := make(map[string]bool)
+	for _, name := range to_remove_names {
+		to_remove_map[name] = true
+	}
+
+	headers := []map[string]string{}
+	inputs := []IOInfo{}
+	to_close := []*os.File{}
+
+	archive, err := os.Open(input_archive_name)
+	if err != nil {
+		panic(err)
+	}
+	to_close = append(to_close, archive)
+	more_headers := read_headers(archive)
+	for _, header := range more_headers {
+		if to_remove_map[header[FILE_NAME_KEY]] {
+			continue
+		}
+		headers = append(headers, header)
+		inputs = append(inputs,
+			IOInfo{
+				file:        archive,
+				seek_offset: as_int64(header[START_KEY]),
+				size:        as_int64(header[SIZE_KEY]),
+			})
+	}
+
+	write_archive(output_archive_name, headers, inputs)
+
+	// Close all of the archives we've opened
+	for _, openFile := range to_close {
+		if err := openFile.Close(); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func extract_by_file_name_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
@@ -745,6 +790,8 @@ func main() {
 		list_command(command_args)
 	case "headers":
 		headers_command(command_args)
+	case "remove-by-file-name":
+		remove_by_filename_command(command_args)
 	default:
 		usage()
 	}
