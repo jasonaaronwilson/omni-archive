@@ -803,8 +803,7 @@ core-archive extract-by-file-name {core-archive-filename} [filenames...]
 core-archive append [output archive] [archive 0] ...
 core-archive list [archive 0] [archive 1] ...
 core-archive headers [archive 0] [archive 1] ...
-TODO core-archive remove-by-file-name [archive 0] [filenames...]
-TODO core-archive update {core-archive-filename} [filenames...]
+core-archive remove-by-file-name [archive 0] [filenames...]
 core-archive --usage
 core-archive --version`)
 }
