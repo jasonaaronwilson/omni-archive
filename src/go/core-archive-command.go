@@ -179,7 +179,7 @@ func create_command(args []string) {
 			}
 
 			header := make(map[string]string)
-			header[FILE_NAME_KEY] = path
+			header[FILE_NAME_KEY] = make_path_relative_if_absolute(path)
 			header[SIZE_KEY] = fmt.Sprintf("%x", info.Size())
 
 			headers = append(headers, header)
@@ -196,6 +196,17 @@ func create_command(args []string) {
 	}
 
 	write_archive(archive_name, headers, inputs)
+}
+
+func make_path_relative_if_absolute(path string) string {
+	if strings.HasPrefix(path, "/") {
+		asRunes := []rune(path)
+		if len(asRunes) == 1 {
+			panic("Removed the only character '/' for a path")
+		}
+		return string(asRunes[1:])
+	}
+	return path
 }
 
 //
