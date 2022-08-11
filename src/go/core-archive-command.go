@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -53,6 +54,17 @@ const (
 	VERBOSITY_INFO    = 2
 )
 
+// The copy_bytes_to_output achieves *massive* speedups by reading and
+// writing in chunks instead of one byte at a time. Since we don't try
+// to reuse the allocated buffer (and for other reasons), for now we
+// are just keeping this at a reasonable size. For testing, I
+// sometimes set this to 3 (it would actually be cool to set this from
+// the command line).
+const (
+	BUFFER_SIZE = 8192
+)
+
+// This represents both IO sources and IO targets.
 type IOInfo struct {
 	// Only one of filename or file should be set
 	filename string
@@ -65,11 +77,6 @@ type IOInfo struct {
 	// an output, it has no meaning and should be left zero
 	size int64
 }
-
-// type ArchiveMemberInfo struct {
-//      values      map[string]string
-//      source_info IOInfo
-// }
 
 //
 // Read all headers and display the file names contained in a very
@@ -236,6 +243,13 @@ func remove_by_filename_command(args []string) {
 	}
 }
 
+// Only extract *files* explicitly requested on the command
+// line. (Since shells and POSIX style filenames (unless explicitly
+// ending in say "/") it's hard to tell directories from files to
+// infer intent).
+//
+// TODO(jawilson): it looks like this can use
+// extract_files_by_predicate shortly.
 func extract_by_file_name_command(args []string) {
 	archive_name := args[0]
 	files := args[1:]
@@ -270,7 +284,7 @@ func extract_by_file_name_command(args []string) {
 		})
 }
 
-func extract_all_files_command(args []string) {
+func extract_command(args []string) {
 	extract_files_by_predicate(args,
 		func(header map[string]string) bool {
 			return has_key(header, FILE_NAME_KEY)
@@ -662,10 +676,23 @@ func copy_bytes(out_info IOInfo, in_info IOInfo) {
 // as possbile.
 //
 func copy_bytes_to_output(output *os.File, input *os.File, num_bytes int64) {
-	for i := int64(0); i < num_bytes; i++ {
-		write_byte(output, read_byte(input))
+	buffer := make([]byte, BUFFER_SIZE)
+	for num_bytes > 0 {
+		if num_bytes < int64(BUFFER_SIZE) {
+			buffer = buffer[:num_bytes]
+		}
+		n, err := input.Read(buffer)
+		if err != nil && err != io.EOF {
+			panic(err)
+		}
+		if n == 0 {
+			panic("should always read at least one byte")
+		}
+		if _, err := output.Write(buffer); err != nil {
+			panic(err)
+		}
+		num_bytes -= int64(n)
 	}
-
 }
 
 // In order to write this file-name, ensure that all of its parent
@@ -784,10 +811,10 @@ func main() {
 		append_command(command_args)
 	case "create":
 		create_command(command_args)
+	case "extract":
+		extract_command(command_args)
 	case "extract-by-file-name":
 		extract_by_file_name_command(command_args)
-	case "extract":
-		extract_all_files_command(command_args)
 	case "list":
 		list_command(command_args)
 	case "headers":
