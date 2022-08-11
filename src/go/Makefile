@@ -1,7 +1,6 @@
 all: build
 
-go_binary = /usr/local/go/bin/go
-# go_binary = /usr/bin/go
+go_binary = $(shell { command -v go || command -v /usr/bin/go || command -v /usr/local-bin/go; } 2>/dev/null)
 
 build: core-archive-command.go
 	${go_binary} build core-archive-command.go
