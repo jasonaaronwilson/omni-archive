@@ -40,8 +40,7 @@ const (
 	POSIX_OWNER_NUMBER_KEY              = "posix-owner-number:"
 )
 
-// Application specific keys are prefixed with "x-" as eXtentions
-// keys.
+// Application specific keys are prefixed with "x-".
 const (
 	USER_DEFINED_KEY_PREFIX = "x-"
 )
@@ -465,9 +464,8 @@ func header_to_string(header map[string]string) string {
 }
 
 //
-// This actually converts a header to its representation of a header
-// which is a series of ULEB128 length prefixed utf-8 strings that
-// happen to all start with with the regexp ".*:".
+// Convert the represetation of a header to the file-system disk byte
+// format.
 //
 // A header always ends with a byte of zero which is an empty string
 // and this routine always emits such an empty line.
@@ -482,34 +480,12 @@ func header_to_bytes(header map[string]string) []byte {
 	return result
 }
 
-// TODO(jawilson): this should create a single byte of zero if both
-// key and value are empty.
 func key_value_pair_to_bytes(key string, value string) []byte {
 	result := []byte{}
 	result = append(result, []byte(key)...)
 	result = append(result, []byte(value)...)
-	result = append(uleb128(int64(len(result))), result...)
+	result = append(result, 0)
 	return result
-}
-
-// Encode an int64 as bytes according to the common definition (see
-// wikipedia) of an unsigned LEB128 number. This should result in
-// between 1 and 10 bytes.
-func uleb128(number int64) []byte {
-	result := []byte{}
-	for {
-		var b byte = byte(number & 0x7f)
-		number = number >> 7
-		more := number > 0
-		if more {
-			b |= (1 << 7)
-		}
-		result = append(result, b)
-		if more {
-			continue
-		}
-		return result
-	}
 }
 
 // Read sequences of ULEB128 prefixed strings into a sequence of
@@ -544,7 +520,7 @@ func read_headers(archive *os.File) []map[string]string {
 func read_header(archive *os.File) map[string]string {
 	result := make(map[string]string)
 	for {
-		str := read_uleb128_prefixed_string(archive)
+		str := read_string(archive)
 		if len(str) == 0 {
 			break
 		}
@@ -554,43 +530,16 @@ func read_header(archive *os.File) map[string]string {
 	return result
 }
 
-// This low-level routine reads an unsigned LEB128 from the current
-// file and then reads that many bytes and converts those bytes to a
-// proper legal unicode string.
-func read_uleb128_prefixed_string(archive *os.File) string {
-	str_length := read_uleb128(archive)
-	str_bytes := make([]byte, str_length)
-	n, err := archive.Read(str_bytes)
-	if int64(n) != str_length {
-		panic("Expected to read all the bytes requested")
-	}
-	if err != nil {
-		panic(err)
-	}
-	return string(str_bytes)
-}
-
-// This low-level routine reads an unsigned LEB128 from the current
-// file and returns it as an int64. Since LEB128 is only used to
-// encode header strings, any value larger than about 4096 is probably
-// fishy (hence int64 being a total over-kill despite "128" in the
-// name.
-func read_uleb128(archive *os.File) int64 {
-	result := int64(0)
-	shift := 0
+// Read a UTF-8 string until a null byte is encountered.
+func read_string(archive *os.File) string {
+	bytes := make([]byte, 0)
 	for {
-		if shift >= 32 {
-			panic("Encountered a ridicuously long ULEB128 string length")
-		}
 		b := read_byte(archive)
-		result |= int64((b & 0x7f)) << shift
-		if b&(1<<7) == 0 {
-			break
+		if b == 0 {
+			return string(bytes)
 		}
-		shift += 7
+		bytes = append(bytes, b)
 	}
-	// fmt.Printf("uleb128 is %d", result)
-	return result
 }
 
 // Reads a single byte that must be present and panic if any errors
