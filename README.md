@@ -7,8 +7,8 @@ endian dependent format.
 
 Member headers are used to store metadata about the file contents such
 as the size (required), filename, and additional metadata associated
-with an individual file in a file system and of course the *raw (byte)
-data* content of each member.
+with an individual file in a file system and of course the raw byte
+data content of each member.
 
 The core archive file format supports:
 
@@ -53,18 +53,15 @@ Here is a graphic represention:
 
 ### Member Header Format
 
-A header is a series of key/value utf-8 encoded stings. In order to
-support any legal utf-8 string as a value, these string are prefixed
-with an ULEB128 encoded *byte* length (though most implementations
-will complain about anything close to 2^63 bytes or even 2^31 bytes
-since these are not where the bulk of the data is actually stored).
+A header is a series of key/value utf-8 encoded stings which are
+useful to think of as lines, however, these lines end in U+0000 rather
+than U+000A.
 
 Each header ends with an empty key/value string, i.e., a single byte
 value of 0.
 
 The end of the entire header area ends when there is a header without
-any elements (so practically speaking, two zero bytes in a row though
-two zero bytes in a row are not sufficient to scan for).
+any elements.
 
 Each member header string is a single keys/value pair in the following
 format (where things in {} are placeholders).
@@ -121,11 +118,11 @@ start:f000
 external-file-name: which would have been illegal to set in this
 example)
 
-This isn't a fully valid header because we aren't showing the encoded
-string lengths and strings don't actually end in a newline to make
-them pretty but otherwise I hope this should give a clear sense of how
-things are represented despite these small details. Even in the full
-binary format, headers are somewhat human readable.
+This isn't a fully valid header because we aren't showing the end of
+string zero byte characters (and added newlines) but otherwise I hope
+this should give a clear sense of how things are represented despite
+these small details. Even in the full binary format, headers are
+somewhat human readable.
 
 Keys that begin with "x-" are meant to be used for header inlined
 non-standard metadata that are specific to certain applications. Tools
@@ -134,9 +131,9 @@ removed.
 
 It is illegal to repeat a key in a header. Instead, use this format:
 ```
-   x-my-key/0:
-   x-my-key/1:
-   x-my-key/{XYZ}:
+x-my-key/0:
+x-my-key/1:
+x-my-key/{XYZ}:
 ```
 
 where {XYZ} is a hexidecimal number though negative signs and left "0"
@@ -197,7 +194,7 @@ user may want to see this meta-data in a seperate file after
 extraction.
 
 When some binary metadata is about a particular file in the archive,
-the key "for-file-name:" can be used (and
+the key "for-file-name:" can be used.
 
 The size: attribute must still be set as always and the mime-type: is
 super highly recommended for clarity.
@@ -382,12 +379,7 @@ member when the total core archive is larger than 2^32 bytes).
 I considered a different format for values, namely, C/Java/Javascript
 style strings using U+005C as an escape sequence (and of course
 supporting \uXXXX to retain full unicode support). That would have
-required more logic in all the libraries that process these values. I
-also considered making header key/value strings actual unix style
-lines (i.e., ending in U+000A) and then simply ending them with
-U+0000. It turns out both U+0000 and U+000A are sometimes valid as
-file-names and hence the ULEB128 length prefix was ultimately decided
-on to allow no limitations on file-names except being valid utf-8.
+required more logic in all the libraries that process these values.
 
 ## Deterministic Builds
 
@@ -409,8 +401,8 @@ This is getting near complete as a useful create/append/extract tool
 (though doesn't support output alignment and POSIX info yet amoung
 other things yet).
 
-Since I'm the current author, this code will eventually be both a
-library and a command line tool.
+This code will eventually be both a library and a command line tool
+though currently it is not split into a library.
 
 # Conclusion
 
@@ -421,11 +413,7 @@ with memory mapped files with differing permissions.
 
 # TODO(jawilson)
 
-We should store directory names so that we make get the exact group,
-owner, and other metadata upon extraction.
+1) Should we store meta-data for directory names so that we make get
+the exact group, owner, and other metadata upon extraction?
 
-
-
-TODO(jawilson): file ACLs and other file metadata? Data from MacOS or
-Windows?
-
+2) file ACLs and other file metadata? Data from MacOS or Windows?
