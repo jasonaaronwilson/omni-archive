@@ -2,24 +2,22 @@
 
 The "oar" file format (MIME type application/x-oar-archive), is a
 redesign of the "tar" format and supports "infinitely" long UTF-8
-filenames without jumping through any hoops.
-
-Absolute simplicity is the main goal.
+filenames without jumping through any hoops and supports user defined
+metadata.
 
 "oar" files use human readable *variable* length headers rather than a
-fixed length "binary" endian dependent format. The metadata for an
-"oar" file can be easily extended with a large degree of forwards and
-backwards compatbility.
+fixed length "binary" endian dependent format. The "oar" file format
+supports forwards and backwards compatibility.
 
 ## Example Omni Archive File
 
 Archives can be extremely simple like the example below that contains
 two "files" named `hello.txt` and `world.txt`. Any line breaks shown
-here are simply for presentation purposes only and do not denote any
-particular encoding of a "newline". "\0" is used to represent U+00000,
-NUL, '\0', 0, 0x0, or whatever you want to call the zero
-byte. Everything else happens to be ASCII though the entire header is
-required to be UTF-8.
+here are simply for presentation purposes and do not denote any
+encoding of a "newline". "\0" is used to represent U+00000, NUL, '\0',
+0, 0x0, or whatever you want to call the zero byte. Everything else
+happens to be 7-bit ASCII though headers can use UTF-8 (and must be
+compatible with it).
 
 ```
 size=5\0
@@ -32,22 +30,6 @@ WORLD!\0
 ```
 
 A detailed breakdown of this appears below.
-
-## Goals
-
-The primary goals are the utmost simplicity and full support for
-arbitrarily long UTF-8 encoded filenames without jumping through hoops
-because the format predates UTF-8.
-
-Utmost simplicity is really not achieve unless "oar" files are so
-simple that even shell scripts can create them without a
-library. (TODO(jawilson): create a bash script that creates a legal
-".oar" file from it's arguments and link to it here.)
-
-A much less important goal (which comes for free since we need
-extensibility for future versions anyways) is the ability to have user
-defined metadata making the omni archive format very suitable as a
-"container" format. [^1]
 
 ## Omni Archive File Format Specification
 
@@ -82,11 +64,10 @@ these as "lines" despite not ending in a traditional line seperator.
 Each line is a UTF-8 string based key / value pair (which makes them
 compatible with a sting -> string hashtable if you are implementing a
 library). The end seperator of a key is "=" (U+003A) and therefore the
-key may not contain this characteer (or NUL), however value strings
-are only restricted in that they may not contain NUL/(U+0000). Unlike
-many formats, there is no mechanism to quote either U+003A or U+0000
-which also means that parsers and printers can be extraordinarily
-simple.
+key may not contain this character (or NUL), however value strings are
+only restricted in that they may not contain NUL/(U+0000). Unlike many
+formats, there is no mechanism to quote either U+003A or U+0000 which
+also means that parsers and printers can be extraordinarily simple.
 
 A blank "line" is used to end the header.
 
@@ -107,48 +88,6 @@ size=1024\0
 
 It is illegal to repeat a key in a header but some workarounds are
 suggested in the extensibility section below.
-
-### Magic Numbers
-
-If an omni archive file starts with "x-" and eventually has "=\0" then
-it must be treated as a user extension and is thus legal to place at
-the beginning of the file (if the file isn't empty?). Just make sure
-the entire sequence is legally encoded UTF-8.
-
-
-tools must already support this as input essentially like a
-comment. There is one restriction and that is that the entire magic
-number must still be a valid UTF-8 string.
-
-
-Magic numbers are a byte sequence at the beginning of a file that
-identify the type or format. Classically these were 32bits but many
-popular formats like JPEG 2000, HEVC, WebP, AVIF, 
-
-While oarchive doesn't have a "magic number" (i.e., bytes at the
-beginning of a file that give a strong indication of a particular kind
-of file), you can still place a subset of magic numbers at the very
-begining of an archive yourself.
-
-In order for you magic number to adhere to the specification, it only
-needs to begin with "x-" and be valid UTF-8. Then you *must* also make
-sure that there is at least "=\0" after it though we prefer you append
-"=magic\0" after it since that may be helpful to both users and tool.
-
-Essentially all new file formats have tran
-
-For a "more" unique magic number (which I suggest), place this at the
-begging of the file:
-
-```
-x-YYYYYY=magic
-```
-
-Where Y is any ASCII character except '=' or NUL.
-
-```
-x-bb=magic
-```
 
 ## Additional Standard Key Value pairs
 
@@ -186,13 +125,13 @@ In order to fully reconstruct a file on disk the way it was when the
 archive was first created, we can include additional metadata:
 
 ```
-posix-file-mode:-rw-r--r--
-posix-group-name:jawilson
-posix-group-number:100
-posix-modification-time-nanos:112000000
-posix-modification-time-seconds:23486345
-posix-owner-name:jawilson
-posix-owner-number:100
+posix-file-mode=-rw-r--r--
+posix-group-name=jawilson
+posix-group-number=100
+posix-modification-time-nanos=112000000
+posix-modification-time-seconds=23486345
+posix-owner-name=jawilson
+posix-owner-number=100
 ```
 
 TODO(jawilson): is this complete? what about creation time?
@@ -208,8 +147,8 @@ with languages that lack support for manipulating integers above
   checksums (we will define a standard simple way to do both in a
   future version).
 * data compression of members - tar also does not support compression
-  which is why they are typically gzipped though this also makes
-  random access impossible
+  which is why "tar" file are typically gzipped though this also makes
+  random access "impossible"
 
 ## Standard Tools
 

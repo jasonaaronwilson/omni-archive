@@ -80,3 +80,45 @@ something like a "web archive", perhaps each HTML, JS, and image files
 could have a property like x-source-url to keep track of where these
 were obtained.
 
+### Magic Numbers
+
+If an omni archive file starts with "x-" and eventually has "=\0" then
+it must be treated as a user extension and is thus legal to place at
+the beginning of the file (if the file isn't empty?). Just make sure
+the entire sequence is legally encoded UTF-8.
+
+
+tools must already support this as input essentially like a
+comment. There is one restriction and that is that the entire magic
+number must still be a valid UTF-8 string.
+
+
+Magic numbers are a byte sequence at the beginning of a file that
+identify the type or format. Classically these were 32bits but many
+popular formats like JPEG 2000, HEVC, WebP, AVIF, 
+
+While oarchive doesn't have a "magic number" (i.e., bytes at the
+beginning of a file that give a strong indication of a particular kind
+of file), you can still place a subset of magic numbers at the very
+begining of an archive yourself.
+
+In order for you magic number to adhere to the specification, it only
+needs to begin with "x-" and be valid UTF-8. Then you *must* also make
+sure that there is at least "=\0" after it though we prefer you append
+"=magic\0" after it since that may be helpful to both users and tool.
+
+Essentially all new file formats have tran
+
+For a "more" unique magic number (which I suggest), place this at the
+begging of the file:
+
+```
+x-YYYYYY=magic
+```
+
+Where Y is any ASCII character except '=' or NUL.
+
+```
+x-bb=magic
+```
+
