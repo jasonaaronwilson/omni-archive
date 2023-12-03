@@ -2,28 +2,43 @@
 
 The "oar" file format (MIME type application/x-oar-archive), is a
 redesign of the "tar" format and supports UTF-8 filenames without
-jumping through any hoops with simplicity as the main goal. "oar"
-files use human readable *variable* length member headers rather than
-a fixed length endian dependent format so it can also easily extended.
+jumping through any hoops with absolute simplicity as the main
+goal. "oar" files use human readable *variable* length member headers
+rather than a fixed length, endian dependent, format so it can also be
+easily extended with a large degree of backwards and forwards
+compatbility.
+
+## Sample Omni Archive File
+
+```
+file:hello.txt\0
+size:5\0
+\0
+HELLOfile:world.txt\0
+size:6\0
+\0
+WORLD!\0
+```
 
 ## Goals
 
 The primary goals are the utmost simplicity and full support for
 arbitrarily long UTF-8 encoded filenames without jumping through
 hoops. "oar" files are so simple that even shell scripts can create
-legal "oar" files without a library. (TODO(jawilson): point to and
-example...)
+legal "oar" files without a library. (TODO(jawilson): create a bash
+script that creates a legal ".oar" file from it's arguments and link
+to it here.)
 
 A much less important goal (which comes for free since we need
 extensibility for future versions anyways) is the ability to have user
-defined metadata making the omni archive format a little more suitable
-as a container format. [^1]
+defined metadata making the omni archive format very suitable as a
+container format. [^1]
 
 ## Basic Format
 
-An archive consists of an optional "magic number" and then zero or
-more members. (A completely empty "zero length" file is a legal
-archive.)
+An archive consists of an optional "magic number" (which can be
+treated as a user defined key/value pair) and then zero or more
+members. (A completely empty "zero length" file is a legal archive.)
 
 ### Magic Number
 
@@ -36,13 +51,10 @@ file:
 x-OR=magic\0
 ```
 
-(You'll later learn that these are just user defined comments so this
-essentially comes for free.)
-
 ### Members
 
 A member consists of a variable sized header plus zero or more "raw"
-bytes of binary data (aka the file contents).
+bytes of binary data (aka the data or file contents).
 
 A header *almost* looks like a UTF-8 encoded text file except that
 instead of "newlines" to seperate the "lines" of the header, we use a
@@ -51,109 +63,94 @@ these as "lines" despite not ending in a traditional line seperator.
 
 Each line is a UTF-8 string based key / value pair (which makes them
 suitable to treat as a sting hashtable if you are implementing a
-library). The seperator is "=" (U+003A) and obiously the key may not
-contain this characteer (or NUL/(U+0000)), however values are only
-restricted in that they may not contain NUL/(U+0000). Unlike many
-formats, there is no mechanism to quote either U+003A or U+0000 which
-also means that parsers and printers can be extraordinarily simple.
+library with deep manipulation skills). The seperator is "=" (U+003A)
+and the key may not contain this characteer (or NUL/(U+0000)), however
+value strings are only restricted in that they may not contain
+NUL/(U+0000). Unlike many formats, there is no mechanism to quote
+either U+003A or U+0000 which also means that parsers and printers can
+be extraordinarily simple.
 
-A blank "line" is used to end the header (after which the data block,
-if the size is > 0, is placed (otherwise it is the end of file or
-another header).
+A blank "line" is used to end the header.
 
-Here is a sample header (where line breaks are used instead of a NUL
-byte to make it easier to present in this document):
+After the header comes the raw data block (when the size string
+interpreted as a base 10 integer is > 0). If the size is missing or
+zero, then another header or the end of file is immediately adjacent.
+
+Here is a sample header again using \0 to denote U+0000 and inserting
+line-breaks purely for presentation value.
 
 ```
-filename=foo/var/baz/myfile.txt
-size=1024
-
+filename=foo/var/baz/myfile.txt\0
+size=1024\0
+\0
 ```
 
-Again, where a line-break appears above it is actually not ASCII "10"
-or "13", or but ASCII NUL (aka 0 aka U+0000).
+It's higly recommended that your tool be deterministic so that it can
+be part of a "reproducible build". One way to do this would be to sort
+the header lines by the key.
 
-It's canonical and recommended (but not required) to sort the header
-by the keys. It is illegal to repeat a key in a header but some
-workarounds are suggested in the extensibility section below.
+It is illegal to repeat a key in a header but some workarounds are
+suggested in the extensibility section below.
 
 ## Extensibility
 
 Keys that begin with "x-" are meant to be used for additional
-non-standard metadata that are specific to certain applications. Tools
-should preserve this metadata unless the user requests they be
-removed.
+non-standard metadata. Tools should preserve this metadata unless the
+user requests they be removed.
 
-In terms of extensibility, here is a sample header with user defined
-meta-data as a simple key/value pair, suitable for most use cases
-where only a small amount of additional meta-data is required:
+Example:
 
 ```
-filename=foo/var/baz/myfile.txt
-size=1024
-x-my-application-part-type=primary-icon
-x-my-application-foo-key=baz
-
+filename=foo/var/baz/myfile.txt\0
+size=1024\0
+x-my-application-part-type=primary-icon\0
+x-my-application-foo-key=baz\0
+\0
 ```
 
-If you don't like key value pairs, then you can just encode your
-application specific metadata using any text based encoding such as
-XML, JSON, TOML, etc. as long as they are valid UTF-8 and don't
-include a NUL byte:
+If you find this limiting, then you can just encode your application
+specific metadata using any text based encoding such as XML, JSON,
+TOML, etc. as long as they are valid UTF-8 and don't include a NUL
+byte:
 
 ```
-filename=foo/var/baz/myfile.txt
-size=1024
-x-my-application-json-metadata={
-  version: 100,
-  name: "foo",
-  offsets: [100, 897, 3678],
-}
-x-another-custom-key=whatever
-
+filename=foo/var/baz/myfile.txt\0
+size=1024\0
+x-my-application-json-metadata={\n
+  version: 100,\n
+  name: "foo",\n
+  offsets: [100, 897, 3678],\n
+}\0
+x-another-custom-key=whatever\0
+\0
 ```
 
 There is no extra code required in the archive utility to understand
 anything about JSON to process (and thus retain) this header and
 delimiters like "{" and "}" are not treated specially by the archive
-tool. What is difficult to see, because the examples shown here
-conflate line breaks (aka newlines) and the NUL byte, is that
-x-my-application-json-metadata uses real "newlines" internally while
-the actual value string associated with the key
-x-my-application-json-metadata is like any other key that ends with a
-NUL byte right after the closing "}" - it just happens to also contain
-internal newlines so it can look pretty.
-
-Let's do the above example again. This time line-breaks are just part
-of the presentation and we will explicitly use the strings (U+0000)
-and (U+000A) to represent the real seperator byte (since headers are
-always UTF-8 we know these are just one byte long):
-
-```
-filename=foo/var/baz/myfile.txt(U+0000)
-size=1042(U+0000)
-x-json-metadata={(U+000A)
-  version: 100,(U+000A)
-  name: "foo",(U+000A)
-  offsets: [100, 897, 3678],(U+000A)
-}(U+0000)
-x-another-custom-key=whatever(U+0000)
-(U+0000)
-```
+tool. 
 
 Since it is illegal to repeat a key in a header. You might want to use
 this format for certain keys that are array like instead:
 
 ```
-x-my-array.0=...
-x-my-array.1=...
+x-my-array/0=...\0
+x-my-array/1=...\0
 ```
 
 And if you need "maps", then maybe this suffices:
 
 ```
-x-my-map.foo=...
-x-my-map.bar=...
+x-my-map/foo=almost anything...\0
+x-my-map/bar=could be put here except NUL...\0
+```
+
+If you want to organize your metadata more, you could use "." as part
+of your keys:
+
+```
+x-com.google.archive.notes.word-wrap=false\0
+x-com.google.archive.foo.bar=false\0
 ```
 
 ### Magic Numbers
