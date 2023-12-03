@@ -215,7 +215,7 @@ Here are some sample invocations of `oarchive`
 ```
 oarchive create --output-file=output.oar --verbose=true file1.txt file2.jpg
 oarchive extract --input-file=input.oar
-oarchive extract --input-file=input.oar --directory=/tmp/foo
+oarchive extract --input-file=input.oar --output-directory=/tmp/foo
 oarchive list --input-file=input.oar
 oarchive append --output-file=output.oar archive1.oar archive2.oar
 cat foo.oar | oarchive extract
