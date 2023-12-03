@@ -1,12 +1,10 @@
 # Omni Archive File Format ("oar" file)
 
 The "oar" file format (MIME type application/x-oar-archive), is a
-redesign of the "ar" format and "tar" formats using today's design
-principles.
-
-"oar" files use human readable (and human editable) extensible
-*variable* length member headers rather than a fixed length or an
-endian dependent format.
+redesign of the "tar" format and supports UTF-8 filenames without
+jumping through any hoops. "oar" files use human readable (and human
+editable) extensible *variable* length member headers rather than a
+fixed length endian dependent format.
 
 ## Goals
 
