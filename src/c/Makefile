@@ -5,3 +5,6 @@ build:
 
 clean:
 	rm -f oarchive *~
+
+format:
+	clang-format -i *.c

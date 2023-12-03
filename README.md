@@ -2,26 +2,44 @@
 
 The "oar" file format (MIME type application/x-oar-archive), is a
 redesign of the "tar" format and supports UTF-8 filenames without
-jumping through any hoops. "oar" files use human readable (and human
-editable) extensible *variable* length member headers rather than a
-fixed length endian dependent format.
+jumping through any hoops with simplicity as the main goal. "oar"
+files use human readable *variable* length member headers rather than
+a fixed length endian dependent format so it can also easily extended.
 
 ## Goals
 
 The primary goals are the utmost simplicity and full support for
 arbitrarily long UTF-8 encoded filenames without jumping through
 hoops. "oar" files are so simple that even shell scripts can create
-legal "oar" files without a library!
+legal "oar" files without a library. (TODO(jawilson): point to and
+example...)
 
 A much less important goal (which comes for free since we need
 extensibility for future versions anyways) is the ability to have user
-defined metadata making the omni archive format suitable as a
-container format for more advanced use cases as a "container". [^1]
+defined metadata making the omni archive format a little more suitable
+as a container format. [^1]
 
 ## Basic Format
 
-An archive consists of zero or more members. (A completely empty "zero
-length" file is a legal archive.)
+An archive consists of an optional "magic number" and then zero or
+more members. (A completely empty "zero length" file is a legal
+archive.)
+
+### Magic Number
+
+Magic numbers are unique byte sequences at the beginning of a file
+that identify its type or format. These are completly optional but
+archive tools will generally add this ASCII sequence to the top of the
+file:
+
+```
+x-OR=magic\0
+```
+
+(You'll later learn that these are just user defined comments so this
+essentially comes for free.)
+
+### Members
 
 A member consists of a variable sized header plus zero or more "raw"
 bytes of binary data (aka the file contents).
@@ -31,18 +49,20 @@ instead of "newlines" to seperate the "lines" of the header, we use a
 NUL byte (U+0000). For the rest of this document we will refer to
 these as "lines" despite not ending in a traditional line seperator.
 
-Each line is a UTF-8 string based key / value pair (so you might want
-to read them into a string hashtable if you are implementing a
-library). Keys may not contain "=" (U+003A) or NUL (U+0000) byte but
-values are only restricted in that they may not contain the NUL byte
-(U+0000).
+Each line is a UTF-8 string based key / value pair (which makes them
+suitable to treat as a sting hashtable if you are implementing a
+library). The seperator is "=" (U+003A) and obiously the key may not
+contain this characteer (or NUL/(U+0000)), however values are only
+restricted in that they may not contain NUL/(U+0000). Unlike many
+formats, there is no mechanism to quote either U+003A or U+0000 which
+also means that parsers and printers can be extraordinarily simple.
 
 A blank "line" is used to end the header (after which the data block,
 if the size is > 0, is placed (otherwise it is the end of file or
 another header).
 
-Here is a sample header (where newlines are used instead of a NUL byte
-to make it easier to present in this document):
+Here is a sample header (where line breaks are used instead of a NUL
+byte to make it easier to present in this document):
 
 ```
 filename=foo/var/baz/myfile.txt
@@ -134,6 +154,48 @@ And if you need "maps", then maybe this suffices:
 ```
 x-my-map.foo=...
 x-my-map.bar=...
+```
+
+### Magic Numbers
+
+If an omni archive file starts with "x-" and eventually has "=\0" then
+it must be treated as a user extension and is thus legal to place at
+the beginning of the file (if the file isn't empty?). Just make sure
+the entire sequence is legally encoded UTF-8.
+
+
+tools must already support this as input essentially like a
+comment. There is one restriction and that is that the entire magic
+number must still be a valid UTF-8 string.
+
+
+Magic numbers are a byte sequence at the beginning of a file that
+identify the type or format. Classically these were 32bits but many
+popular formats like JPEG 2000, HEVC, WebP, AVIF, 
+
+While oarchive doesn't have a "magic number" (i.e., bytes at the
+beginning of a file that give a strong indication of a particular kind
+of file), you can still place a subset of magic numbers at the very
+begining of an archive yourself.
+
+In order for you magic number to adhere to the specification, it only
+needs to begin with "x-" and be valid UTF-8. Then you *must* also make
+sure that there is at least "=\0" after it though we prefer you append
+"=magic\0" after it since that may be helpful to both users and tool.
+
+Essentially all new file formats have tran
+
+For a "more" unique magic number (which I suggest), place this at the
+begging of the file:
+
+```
+x-YYYYYY=magic
+```
+
+Where Y is any ASCII character except '=' or NUL.
+
+```
+x-bb=magic
 ```
 
 ## Additional Standard Key Value pairs

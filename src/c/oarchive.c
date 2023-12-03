@@ -13,33 +13,37 @@
 value_array_t* get_command_line_command_descriptors() {
   value_array_t* result = make_value_array(1);
   value_array_add(result, ptr_to_value(make_command_line_command_descriptor(
-                              "create", "create an archive from the given files (but not directories currently")));
+                              "create",
+                              "create an archive from the given files (but not "
+                              "directories currently")));
   value_array_add(result,
                   ptr_to_value(make_command_line_command_descriptor(
                       "list", "list all the members that have a filename")));
-  value_array_add(result,
-                  ptr_to_value(make_command_line_command_descriptor(
-                      "extract", "extract all of the members that have a filename")));
-  value_array_add(result,
-                  ptr_to_value(make_command_line_command_descriptor(
-                      "append", "combine archives")));
+  value_array_add(
+      result,
+      ptr_to_value(make_command_line_command_descriptor(
+          "extract", "extract all of the members that have a filename")));
+  value_array_add(result, ptr_to_value(make_command_line_command_descriptor(
+                              "append", "combine archives")));
   return result;
 }
 
 value_array_t* get_command_line_flag_descriptors() {
   value_array_t* result = make_value_array(1);
-  value_array_add(result,
-                  ptr_to_value(make_command_line_flag_descriptor(
-                      "input-file", command_line_flag_type_string,
-                      "Specifies which archive to operate on for read operations")));
+  value_array_add(
+      result,
+      ptr_to_value(make_command_line_flag_descriptor(
+          "input-file", command_line_flag_type_string,
+          "Specifies which archive to operate on for read operations")));
   value_array_add(result,
                   ptr_to_value(make_command_line_flag_descriptor(
                       "output-file", command_line_flag_type_string,
                       "Specifies the name of the archive output file name")));
-  value_array_add(result,
-                  ptr_to_value(make_command_line_flag_descriptor(
-                      "output-directory", command_line_flag_type_string,
-                      "Specifies the directory where to place the output results")));
+  value_array_add(
+      result,
+      ptr_to_value(make_command_line_flag_descriptor(
+          "output-directory", command_line_flag_type_string,
+          "Specifies the directory where to place the output results")));
   return result;
 }
 
@@ -48,7 +52,8 @@ command_line_parser_configuation_t* get_command_line_parser_config() {
       = malloc_struct(command_line_parser_configuation_t);
   config->program_name = "oarchive";
   config->program_description
-      = "This is the pure C version of the Omni Archive Tool (most similar to ar or tar))";
+      = "This is the pure C version of the Omni Archive Tool (most similar to "
+        "ar or tar))";
   config->command_descriptors = get_command_line_command_descriptors();
   config->flag_descriptors = get_command_line_flag_descriptors();
   return config;
@@ -67,15 +72,36 @@ void append_header_and_file_contents(FILE* out, char* filename) {
   }
 }
 
+string_tree_t* read_header(FILE* in) {
+  string_tree_t* metadata = NULL;
+  while (!feof(in)) {
+    buffer_t* key = make_buffer(8);
+    key = buffer_read_until(key, in, '=');
+    buffer_t* value = make_buffer(8);
+    value = buffer_read_until(value, in, '\0');
+    if (key->length == 0 && value->length == 0) {
+      return metadata;
+    }
+    metadata = string_tree_insert(metadata, buffer_to_c_string(key),
+                                  str_to_value(buffer_to_c_string(value)));
+  }
+  return metadata;
+}
+
+
 void create_command(command_line_parse_result_t args_and_files) {
+  log_info("create_command");
+
   FILE* out = stdout;
-  value_result_t output_filename_value = string_ht_find(args_and_files.flags, "output-file");
+  value_result_t output_filename_value
+      = string_ht_find(args_and_files.flags, "output-file");
   if (is_ok(output_filename_value)) {
-      out = fopen(output_filename_value.str, "w");
+    out = fopen(output_filename_value.str, "w");
   }
 
   for (int i = 0; i < args_and_files.files->length; i++) {
-    append_header_and_file_contents(stdout, value_array_get(args_and_files.files, i).str);
+    append_header_and_file_contents(
+        stdout, value_array_get(args_and_files.files, i).str);
   }
 
   if (is_ok(output_filename_value)) {
@@ -83,10 +109,58 @@ void create_command(command_line_parse_result_t args_and_files) {
   }
 }
 
+void list_command(command_line_parse_result_t args_and_files) {
+  log_info("list_command");
+
+  FILE* in = stdin;
+
+  value_result_t input_filename_value
+      = string_ht_find(args_and_files.flags, "input-file");
+  if (is_ok(input_filename_value)) {
+    in = fopen(input_filename_value.str, "r");
+  }
+
+  while (!feof(in)) {
+    string_tree_t* metadata = read_header(in);
+
+    value_result_t size_value = string_tree_find(metadata, "size");
+    value_result_t filename_value = string_tree_find(metadata, "filename");
+
+    if (!is_ok(size_value)) {
+      if (is_ok(filename_value)) {
+        log_warn(
+            "Skipping header (%s) with no specified size. Must assume it is "
+            "zero.",
+            filename_value.str);
+      } else {
+        log_warn(
+            "Skipping header with no specified size. Must assume it is zero.");
+      }
+      // TODO(jawilson): free_bytes(metadata);
+      continue;
+    }
+
+    if (is_ok(filename_value)) {
+      fprintf(stdout, "%s\n", filename_value.str);
+    }
+
+    value_result_t skip_amount = string_parse_uint64(size_value.str);
+    if (is_ok(skip_amount)) {
+      // TODO(jawilson): what if the file was truncated?
+      fseek(in, skip_amount.i64, SEEK_CUR);
+    }
+    // TODO(jawilson): free_bytes(metadata);
+  }
+
+  if (is_ok(input_filename_value)) {
+    fclose(in);
+  }
+}
+
 int main(int argc, char** argv) {
   configure_fatal_errors((fatal_error_config_t){
       .catch_sigsegv = true,
-    });
+  });
   command_line_parse_result_t args_and_files
       = parse_command_line(argc, argv, get_command_line_parser_config());
 
@@ -96,8 +170,11 @@ int main(int argc, char** argv) {
 
   if (string_equal("create", args_and_files.command)) {
     create_command(args_and_files);
+  } else if (string_equal("list", args_and_files.command)) {
+    list_command(args_and_files);
+  } else {
+    fatal_error(ERROR_BAD_COMMAND_LINE);
   }
 
   exit(0);
 }
-
