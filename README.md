@@ -1,419 +1,258 @@
-# Core Archive File Format (car file)
+# Omni Archive File Format ("oar" file)
 
-The "car" file format (MIME type application/x-core-archive), is a
-redesign of the "ar" format(s). "car" files use semi human readable
+The "oar" file format (MIME type application/x-oar-archive), is a
+redesign of the "ar" format and "tar" formats using today's design
+principles.
+
+"oar" files use human readable (and human editable) extensible
 *variable* length member headers rather than a fixed length or an
 endian dependent format.
 
-Member headers are used to store metadata about the file contents such
-as the size (required), filename, and additional metadata associated
-with an individual file in a file system and of course the raw byte
-data content of each member.
+## Goals
 
-The core archive file format supports:
+The primary goals are the utmost simplicity and full support for
+arbitrarily long UTF-8 encoded filenames without jumping through
+hoops. "oar" files are so simple that even shell scripts can create
+legal "oar" files without a library!
 
-1. aligning raw data (for example to 64-bits or even machine page sizes)
-2. checksums on the raw data (to detect corruption)
-3. data compression of the raw data
-4. unlimited length/content utf-8 file-names
-5. posix file metadata
-6. simple application specific metadata extensions
-7. application specific binary meta-data such as indexes, symbol
-   tables, etc.
+A much less important goal (which comes for free since we need
+extensibility for future versions anyways) is the ability to have user
+defined metadata making the omni archive format suitable as a
+container format for more advanced use cases as a "container". [^1]
 
-The Core Archive File Format is purposefully meant to be embraced and
-extended while the primary feature of storing blobs of data with their
-"file-name" is still very simple.
+## Basic Format
 
-## The Core Archive Specification
+An archive consists of zero or more members. (A completely empty "zero
+length" file is a legal archive.)
 
-A "car" file is a sequence of variable length "member headers" (TODO:
-sorted by file-name or member name?) followed by the raw data for
-members that have raw data. Members usually represent files though
-sometimes they represent pure meta-data stored either in the header or
-as application specific meta-data stored as raw data.
+A member consists of a variable sized header plus zero or more "raw"
+bytes of binary data (aka the file contents).
 
-Unlike "ar" files, "car" files do not have a magic
-number. (TODO(jawilson): why not just define a magic number and
-include a version scheme?)
+A header *almost* looks like a UTF-8 encoded text file except that
+instead of "newlines" to seperate the "lines" of the header, we use a
+NUL byte (U+0000). For the rest of this document we will refer to
+these as "lines" despite not ending in a traditional line seperator.
 
-Here is a graphic represention:
+Each line is a UTF-8 string based key / value pair (so you might want
+to read them into a string hashtable if you are implementing a
+library). Keys may not contain "=" (U+003A) or NUL (U+0000) byte but
+values are only restricted in that they may not contain the NUL byte
+(U+0000).
 
-```
-[file 1 header]
-[file 2 header size:0]
-[file 3 header]
-[0, i.e., and empty header]
-[zero byte filled padding]
-[file 1 raw data]
-[zero byte filled padding]
-[file 3 raw data]
-[zero byte filled padding]
-```
+A blank "line" is used to end the header (after which the data block,
+if the size is > 0, is placed (otherwise it is the end of file or
+another header).
 
-### Member Header Format
-
-A header is a series of key/value utf-8 encoded stings which are
-useful to think of as lines, however, these lines end in U+0000 rather
-than U+000A.
-
-Each header ends with an empty key/value string, i.e., a single byte
-value of 0.
-
-The end of the entire header area ends when there is a header without
-any elements.
-
-Each member header string is a single keys/value pair in the following
-format (where things in {} are placeholders).
+Here is a sample header (where newlines are used instead of a NUL byte
+to make it easier to present in this document):
 
 ```
-{key in utf-8}:{value in utf-8}
-```
-
-Keys are arbitrary sequences of unicode utf-8 encoded code-points that
-don't contain U+003A. All of the "standard" keys (i.e., defined in
-this document) are 7-bit ASCII printable characters (a subset of
-unicode utf-8).
-
-Values are utf8 strings, i.e., everything after the ":". In practice,
-when encoding "integers" for values of well defined keys, we use
-base-16 encoded integers (using the "digits" drawn from the ASCII
-characters 0123456789abcdef) possibly with a leading "-" and very
-likely to contain left padded zeros (after the initial "-" if
-present).
-
-When parsing values to integers, readers should handle at least all
-numbers representable in a 64bit 2's complement signed number (so up
-to 2^63 and down to -2^63). "-0" should always be considered to just
-be zero (though implementations should *never* emit "-0" on purpose
-unless they are simply preserving an incoming header).
-
-Each member header must contain the size: key/value pair as well as
-one of the following key/value pairs: file-name:, metadata-name:, or
-external-file-name:. size: is *required* even when it is zero.
-
-Here is a nearly full set of well-known keys with some sample values:
+filename=foo/var/baz/myfile.txt
+size=1024
 
 ```
-align:1
-data-compression-algorithm:application/gzip
-data-hash-algorithm:SHA-256
-data-hash:784f6696040e7a4eb1465dacfaf421a526d2dd226601c0de59d7a1b711d17b99
-data-size:302f
-file-name:foo.txt
-file-version:17
-mime-type:text/plain
-posix-file-mode:-rw-r--r--
-posix-group-number:100
-posix-group-name:jawilson
-posix-modification-time-seconds:fffff
-posix-modification-time-nanos:78ef
-posix-owner-number:100
-posix-owner-name:jawilson
-size:18d6
-start:f000
-```
 
-(Additional well known keys not shown are metadata-name:, for-file-name:, and
-external-file-name: which would have been illegal to set in this
-example)
+Again, where a line-break appears above it is actually not ASCII "10"
+or "13", or but ASCII NUL (aka 0 aka U+0000).
 
-This isn't a fully valid header because we aren't showing the end of
-string zero byte characters (and added newlines) but otherwise I hope
-this should give a clear sense of how things are represented despite
-these small details. Even in the full binary format, headers are
-somewhat human readable.
+It's canonical and recommended (but not required) to sort the header
+by the keys. It is illegal to repeat a key in a header but some
+workarounds are suggested in the extensibility section below.
 
-Keys that begin with "x-" are meant to be used for header inlined
+## Extensibility
+
+Keys that begin with "x-" are meant to be used for additional
 non-standard metadata that are specific to certain applications. Tools
 should preserve this metadata unless the user requests they be
 removed.
 
-It is illegal to repeat a key in a header. Instead, use this format:
+In terms of extensibility, here is a sample header with user defined
+meta-data as a simple key/value pair, suitable for most use cases
+where only a small amount of additional meta-data is required:
+
 ```
-x-my-key/0:
-x-my-key/1:
-x-my-key/{XYZ}:
+filename=foo/var/baz/myfile.txt
+size=1024
+x-my-application-part-type=primary-icon
+x-my-application-foo-key=baz
+
 ```
 
-where {XYZ} is a hexidecimal number though negative signs and left "0"
-padding is *not* allowed.
+If you don't like key value pairs, then you can just encode your
+application specific metadata using any text based encoding such as
+XML, JSON, TOML, etc. as long as they are valid UTF-8 and don't
+include a NUL byte:
 
-### Member Data Format
+```
+filename=foo/var/baz/myfile.txt
+size=1024
+x-my-application-json-metadata={
+  version: 100,
+  name: "foo",
+  offsets: [100, 897, 3678],
+}
+x-another-custom-key=whatever
 
-The raw data for a member is just bytes that appear anywhere after the
-header data and don't necessarily need to be in the same order as the
-headers. These are located using the "start" offset (relative to the
-begining of the file).
+```
 
-[When the same exact data contents and alignment occur, tools are
-encouraged to "point" at the same raw data from different member
-headers meaning this raw data can be emitted only once, however,
-processing tools are allowed to duplicate these (perhaps making the
-archive much bigger) when say combining archives.]
+There is no extra code required in the archive utility to understand
+anything about JSON to process (and thus retain) this header and
+delimiters like "{" and "}" are not treated specially by the archive
+tool. What is difficult to see, because the examples shown here
+conflate line breaks (aka newlines) and the NUL byte, is that
+x-my-application-json-metadata uses real "newlines" internally while
+the actual value string associated with the key
+x-my-application-json-metadata is like any other key that ends with a
+NUL byte right after the closing "}" - it just happens to also contain
+internal newlines so it can look pretty.
 
-As noted, the member data is sometimes aligned and tools must preserve
-this alignment when joining together archives and members should be
-zero padded according to the same alignment. The rationale is to allow
-"car" files to exist that have all data aligned to either 64bit
-boundaries or even page boundaries such that a subset of an entire
-"car" file can be memory mapped and not see or especially write data
-that doesn't pertain to that "member" of a "car" file.
+Let's do the above example again. This time line-breaks are just part
+of the presentation and we will explicitly use the strings (U+0000)
+and (U+000A) to represent the real seperator byte (since headers are
+always UTF-8 we know these are just one byte long):
 
-The raw member data is always either the raw data bytes in a file, a
-compressed version of the raw bytes in a file using a compression
-algorithm, or some application specific data (for example, indexes of
-various sorts meant to make finding a specified part of the "car" file
-much easier).
+```
+filename=foo/var/baz/myfile.txt(U+0000)
+size=1042(U+0000)
+x-json-metadata={(U+000A)
+  version: 100,(U+000A)
+  name: "foo",(U+000A)
+  offsets: [100, 897, 3678],(U+000A)
+}(U+0000)
+x-another-custom-key=whatever(U+0000)
+(U+0000)
+```
 
-If compression is used, we recommend using application/gzip for
-general purpose core archive files since that is very widely available
-and will be supported by all but the simplest tools. (And of course a
-command line utility will be available to rewrite an archive
-completely uncompressed for the tools that can't even handle that).
+Since it is illegal to repeat a key in a header. You might want to use
+this format for certain keys that are array like instead:
 
-Compression is *not* used by default (one can always compress the
-entire "car" archive with a compression algorithm of one's choice,
-though not all tools would understand that without first decompressing
-the "car" file especially if the compression algorithm isn't
-application/gzip).
+```
+x-my-array.0=...
+x-my-array.1=...
+```
 
-## Indexes, Symbol Tables, Etc.
+And if you need "maps", then maybe this suffices:
 
-It may be desireable to store additional metadata in an efficient
-binary format that either refers to a single file in an archive or the
-entire archive itself!
+```
+x-my-map.foo=...
+x-my-map.bar=...
+```
 
-When describing meta-data for a particular file, implementations
-*must* use the meta-data-for-file-name:{file-name} and must not
-include a file-name: (or meta-data: key).
+## Additional Standard Key Value pairs
 
-When describing meta-data for an entire archive, the header
-"meta-data:{name}" should be used. {name} should be "pathlike" since a
-user may want to see this meta-data in a seperate file after
-extraction.
+(tool support coming soon...)
 
-When some binary metadata is about a particular file in the archive,
-the key "for-file-name:" can be used.
+### MIME Types
 
-The size: attribute must still be set as always and the mime-type: is
-super highly recommended for clarity.
+It may be useful to store a MIME type to describe what the binary data
+blob holds (most filesystems don't have a way to store this so they
+typically will not survive a round-trip through extraction to the
+filesystem and re-archiving, just like user defined keys).
 
-We also recommend using one or more additional key/value pairs so that
-a consumer of this index can determine if it is up to date or not (the
-exact recommendation is TBD) since tools that manipulate a "car" file
-could add new files or delete other files without updating this
-application specific metadata.
+Example:
 
-## Versions
+```
+mime-type=text/plain
+```
 
-The car format allows multiple members with the same file-name as long
-as they *all* have version numbers and these are *all* distinct. By
-default, the highest versioned member should be "returned" when
-requesting a member by name without an explicit version number.
+### Checksums
 
-## Lite Archives
+One obvious missing feature for an archive tool are checksums. We
+define two additional keys to allow for the integrity of the binary
+data in individual members though these are not added or checked by
+default (default checking will eventually become the default for
+tools):
 
-"ar" provides a format whereby only metadata is stored, and the data
-contents are expected to be found in the file-system.
+```
+data-hash-algorithm:SHA-256
+data-hash:784f6696040e7a4eb1465dacfaf421a526d2dd226601c0de59d7a1b711d17b99
+```
 
-For core archives, one merely needs to set size: to 0 and use
-external-file-name: for a member (instead of file-name:). In this case
-the version: field must not be present.
+### POSIX file information
 
-# Standard Keys
+In order to fully reconstruct a file on disk the way it was when the
+archive was first created, we can include additional metadata:
 
-Most keys are optional or only required when another field is set.
+```
+posix-file-mode:-rw-r--r--
+posix-group-name:jawilson
+posix-group-number:100
+posix-modification-time-nanos:112000000
+posix-modification-time-seconds:23486345
+posix-owner-name:jawilson
+posix-owner-number:100
+```
 
-## align:
+TODO(jawilson): is this complete? what about creation time?
 
-The alignment in hexidecimal (Z) as in 2^Z. Y=1 is the defalut
-alignment and simply means byte aligned. Z=3 would mean 8 byte/64bit
-alignment, and Z=c would mean 4096 byte alignment. Aligning on page
-boundaries make core archive physically larger but makes memory
-mapping individual raw data member easier especially when readers want
-to prevent one reader from seeing something another reader can't see.
+The modification time is split into two 64bit fields to simplify usage
+with languages that lack support for manipulating integers above
+64bits.
 
-## data-compression-algorithm: and data-size:
+## Unsupported Features
 
-When either is present, both must be set. Additionally size: should be
-present and > 0 (since compression is useless when the size is zero).
+* alignment of the data of a member to play nicely with mmap
+* indexes for fast random access to individual files + archive wide
+  checksums (we will define a standard simple way to do both in a
+  future version).
+* data compression of members - tar also does not support compression
+  which is why they are typically gzipped though this also makes
+  random access impossible
 
-data-size: gives us the uncompressed length and data-size: must only
-be set when data-compression-algorithm: is also set.
+## Standard Tools
 
-The most widely supported format is application/gzip and all but the
-simplest libraries should support it.
+The `oarchive` tool can be used to create, list, append, and extract
+members (technically "cat" can be used to append two archives but
+append might do smart things later like recreate indxes and maintain
+file-wide checksums).
 
-## data-hash-algorithm: and data-hash:
+`oarchive` actually has two implementations, one in Go, and one in
+standard C for platforms not supported by Go or in cases where the
+smallest toolsize is beneficial.
 
-When either is present, both must be set.
+Here are some sample invocations of `oarchive`
 
-Many readers can ignore these when reading though command line tools
-that unarhive should provid a command line option for checking these
-after extraction (or can check them by default).
+```
+oarchive create --output-file=output.oar --verbose=true file1.txt file2.jpg
+oarchive extract --input-file=input.oar
+oarchive extract --input-file=input.oar --directory=/tmp/foo
+oarchive list --input-file=input.oar
+oarchive append --output-file=output.oar archive1.oar archive2.oar
+cat foo.oar | oarchive extract
+```
 
-The data-hash: should always be computed before compression (that way
-we can tell if the data compression algorithm actually preserved the
-underlying data or not).
-
-## file-name:, external-file-name:, metadata-name:, for-file-name:, and path-seperator:
-
-Only one of file-name:, metadata-name:, and external-file-name: should be
-set. When metadata-name: is set, the for-file-name: field can also be set.
-
-file-name: is meant to specify an absolute or relative full file-path
-and name using either the default path-seperator character "/" or
-another path seperator character sequence such as "\" (for example on
-windows).
-
-## file-version:
-
-A positive integer encoded in hexidecimal.
-
-When multiple members with the same file-name are present, this serves
-to differentiate them. File systems that support version numbers are
-pretty rare though. Extraction tools may append "~N~" to the file-name
-when extracting the members that aren't the highest version number
-(where N is actual a base-10 number) though by default will only
-extract the highest version of a file.
-
-## mime-type:
-
-This field is required when metadata-name: is used though fully
-encouraged for other members too. (If a core-archive represents a
-binary library file and has embedded data that can be accessed at
-run-time, the mime-type: may be highly useful, for example as part of
-an HTTP response.)
-
-When used for indexes, tools may support mapping of a mime-type: to
-another tool which can recompute binary metadata once the archive is
-first created (this is similar to how "ar" may require running
-"ranlib" on some systems).
-
-## posix-file-mode:
-
-The human readable posix file mode (not the octal based numbers).
-
-## posix-group-name:
-
-This is the group name of the file.
-
-## posix-group-number:
-
-This is a hexidecimal group id. We recommend using posix-group-name:
-instead where possible. When it's not possible to encode the full
-resolution of a group number, tools should either panic or warn about
-this.
-
-## posix-modification-time-seconds: and posix-modification-time-nanos:
-
-If posix-modification-time-nanos: is present then
-posix-modification-time-seconds: must also be set even if zero.
-
-The combination provides nano second resolution from January 1, 1970
-(time-zone "Z"). The seconds may be a negative number though nanos are
-always stored as a positive number.
-
-## posix-owner-name:
-
-This is the owner name of the file.
-
-## posix-owner-number:
-
-This is a hexidecimal owner id. We recommend using posix-owner-name:
-instead where possible. When it's not possible to encode the full
-resolution of a large group number, tools should either panic or warn
-about this.
-
-## size:
-
-This is the hexidecimal size of the associated raw data for a member
-and must be set for all members even if zero. Note that left padding
-hexidecimal numbers with one or more ASCII "0" digits is often
-employed to make writing a core achive file easier because we can't
-choose offsets for the raw data associated with a memember until the
-entire size of all the header files is not known since headers are
-inherently variable length. A writer will typically fully encode all
-of the headers and then either modify all of the sizes (and the start
-offsets) or simply regenerate the headers completely now that these
-can be determined.
-
-The standard tool will likely make either two or three attempts at
-generating headers. The first time it is assumes that everything is
-lower than ffffffff (8 digits, 32 bits) and can obviously abort if
-this is determined not to be true (or obvious from the start when the
-sum of the data sizes are know to be greater than 2^32 or sufficiently
-close to it assuming padding and an approximation of the header size
-itself times the number of headers). The last attempt resorts to using
-16 hexidecimal digits and would only fail if the resulting core
-archive file is larger than 2^64 bytes.
-
-## start:
-
-This is the offset relative to *the begining of the file* stored as a
-positive hexidecimal number. start: is required when size: > 0. See
-size: to understand why these may often be encoded with left padded
-"0" digits to simplify writers.
+This is definitely not as terse as other tools though shell aliases,
+shell functions, or shell script wrappers can easily make the archive
+command line act more like "tar", "ar", "zip", etc. according to your
+preference.
 
 # Discussion
 
-core archive files may have a slightly larger foot-print than "ar"
+Omni archive files may have a slightly larger foot-print than "ar"
 files because of the uncompressed semi human readable member headers
 ("ar" headers are fixed size and because of this they have caused
 great confusion regarding long file names and unicode characters in
 file names).
 
-Placing headers at the beginning of a file (and sorting them?) makes
-generation more difficult but then allows a scan of only the begining
-of the file to find where a particular member's raw data is (and a
-binary search may be possible directly on the headers when an entire
-core-archive is in memory and sorted (for example, memory-mapped or
-embedded in an executable).
-
-Consideration was made for using unsigned ULEB128 to encode number
-fields inside of the header key/value strings but the saving would
-probably be less than about 16 bytes per member (or 32 bytes per
-member when the total core archive is larger than 2^32 bytes).
-
 I considered a different format for values, namely, C/Java/Javascript
 style strings using U+005C as an escape sequence (and of course
 supporting \uXXXX to retain full unicode support). That would have
-required more logic in all the libraries that process these values.
-
-## Deterministic Builds
-
-If a core archive file is the output of a build step and the input to
-another build step then it may be desireable to omit lots of useful
-but irrelevant metadata and instead rely on the "data-hash-algorithm"
-and the "data-hash" fields instead of say the posix information,
-especially "posix-modification-time" (and the user/group information
-if you want to share across builds).
-
-# Implementations (command line tools and libraries)
-
-We'll update the this list of implementations right here once they are
-ready for consideration or for extensive usage.
-
-1. src/go/core-archive-command.go
-
-This is getting near complete as a useful create/append/extract tool
-(though doesn't support output alignment and POSIX info yet amoung
-other things yet).
-
-This code will eventually be both a library and a command line tool
-though currently it is not split into a library.
+required much more logic in all the libraries that process these
+values.
 
 # Conclusion
 
-The Core Archive File Format is a proposal for a "universal" and
-extensible archive format that is extremely easy to produce and
-consume. Alignment (and therefore padding) makes it suitable for use
-with memory mapped files with differing permissions.
+The oar archive file format is an extensible archive format that is
+extremely easy to produce and consume even without a special
+library. That they support UTF-8 long filenames with minimal kludges
+is a huge plus.
 
-# TODO(jawilson)
-
-1) Should we store meta-data for directory names so that we make get
-the exact group, owner, and other metadata upon extraction?
-
-2) file ACLs and other file metadata? Data from MacOS or Windows?
+[^1] For example, if you were designing a file format for a word
+processor, you might store the document text as one "logical"
+file-name (maybe in XML?) and then every image in the document could
+be stored as other "logical" file-names (presumably PNGs, JPGs, GIFs,
+etc.) Maybe you really wanted each "chapter" to be it's own logical
+file, you can do that too! Another example, if you wanted to create
+something like a "web archive", perhaps each HTML, JS, and image files
+could have a property like x-source-url to keep track of where these
+were obtained.
