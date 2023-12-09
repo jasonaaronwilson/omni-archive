@@ -1,7 +1,7 @@
-all: build
+.PHONY all: build
 
 build:
-	gcc -g -rdynamic -O2 -o oarchive oarchive.c
+	gcc -g -rdynamic -o oarchive $(realpath oarchive.c)
 
 clean:
 	rm -f oarchive *~

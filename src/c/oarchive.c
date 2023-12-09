@@ -7,8 +7,9 @@
 
 #include <stdlib.h>
 
+#define ARMYKNIFE_LIB_DEFAULT_LOG_LEVEL LOGGER_DEBUG
 #define C_ARMYKNIFE_LIB_IMPL
-#include "c-armyknife-lib.h"
+#include "c-armyknife-lib-no-lines.h"
 
 value_array_t* get_command_line_command_descriptors() {
   value_array_t* result = make_value_array(1);
@@ -75,6 +76,12 @@ void append_header_and_file_contents(FILE* out, char* filename) {
 string_tree_t* read_header(FILE* in) {
   string_tree_t* metadata = NULL;
   while (!feof(in)) {
+    if (file_peek_byte(in) == '\0') {
+      fgetc(in);
+      break;
+    }
+    // TODO(jawilson): If there is an illegal header line without an
+    // =, this won't work very well.
     buffer_t* key = make_buffer(8);
     key = buffer_read_until(key, in, '=');
     buffer_t* value = make_buffer(8);
@@ -109,6 +116,15 @@ void create_command(command_line_parse_result_t args_and_files) {
   }
 }
 
+void log_metadata(string_tree_t* metadata) {
+  log_info("Logging metadata");
+  if (should_log_info()) {
+    string_tree_foreach(metadata, key, value, {
+        log_info("'%s' = '%s'", key, value.str);
+      });
+  }
+}
+
 void list_command(command_line_parse_result_t args_and_files) {
   log_info("list_command");
 
@@ -117,38 +133,35 @@ void list_command(command_line_parse_result_t args_and_files) {
   value_result_t input_filename_value
       = string_ht_find(args_and_files.flags, "input-file");
   if (is_ok(input_filename_value)) {
+    log_info("opening %s", input_filename_value.str);
     in = fopen(input_filename_value.str, "r");
   }
 
-  while (!feof(in)) {
+  while (!file_eof(in)) {
     string_tree_t* metadata = read_header(in);
+    log_metadata(metadata);
 
     value_result_t size_value = string_tree_find(metadata, "size");
     value_result_t filename_value = string_tree_find(metadata, "filename");
 
     if (!is_ok(size_value)) {
-      if (is_ok(filename_value)) {
-        log_warn(
-            "Skipping header (%s) with no specified size. Must assume it is "
-            "zero.",
-            filename_value.str);
-      } else {
-        log_warn(
-            "Skipping header with no specified size. Must assume it is zero.");
-      }
-      // TODO(jawilson): free_bytes(metadata);
-      continue;
+      log_fatal("Encounterd a header without an explicit size. It should at least be set to zero");
+      fatal_error(ERROR_FATAL);
     }
-
+    value_result_t skip_amount = string_parse_uint64_dec(size_value.str);
+    if (!is_ok(skip_amount)) {
+      log_fatal("Encounterd a header with an illegal size");
+      fatal_error(ERROR_FATAL);
+    }
+    
     if (is_ok(filename_value)) {
       fprintf(stdout, "%s\n", filename_value.str);
+    } else {
+      fprintf(stdout, "%s\n", "<<member lacks filename>>");
     }
 
-    value_result_t skip_amount = string_parse_uint64(size_value.str);
-    if (is_ok(skip_amount)) {
-      // TODO(jawilson): what if the file was truncated?
-      fseek(in, skip_amount.i64, SEEK_CUR);
-    }
+    log_info("Skipping %lu\n", skip_amount.u64);
+    fseek(in, skip_amount.i64, SEEK_CUR);
     // TODO(jawilson): free_bytes(metadata);
   }
 
@@ -161,6 +174,7 @@ int main(int argc, char** argv) {
   configure_fatal_errors((fatal_error_config_t){
       .catch_sigsegv = true,
   });
+  logger_init();
   command_line_parse_result_t args_and_files
       = parse_command_line(argc, argv, get_command_line_parser_config());
 
