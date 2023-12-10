@@ -1,12 +1,13 @@
 # Omni Archive File Format ("oar" file)
 
 The "oar" file format (MIME type application/x-oar-archive), is a
-redesign of the "tar" format and has arbitarly long UTF-8 filenames
+redesign of the "tar" format which has arbitarly long UTF-8 filenames
 (as long as they don't contain U+0000).
 
 "oar" files use human readable *variable* length headers rather than a
 fixed length "binary" endian dependent format. The "oar" file format
-supports forwards and often backwards compatibility.
+supports forwards/compatibility while supporting custom use cases as a
+container format.
 
 ## Example Omni Archive File
 
@@ -25,7 +26,7 @@ file=hello.txt\0
 HELLOfile=world.txt\0
 size=6\0
 \0
-WORLD!\0
+WORLD!
 ```
 
 A detailed breakdown of this appears below.
@@ -72,9 +73,9 @@ A blank "line" is used to end the header.
 
 Immediately afterwords "size" bytes of binary bytes must be present
 because after the header comes the raw data block which may be absent
-when the "size" key is absent or when decoded as a base 10 integer is
-zero). If the size is missing or zero, then another header or the end
-of file is immediately adjacent.
+when the "size" key when decoded as a base 10 integer is zero. If the
+size is missing or zero, then another header or the end of file is
+immediately adjacent.
 
 Here is a sample header again using \0 to denote U+0000 and inserting
 line-breaks purely for presentation value.
@@ -163,12 +164,32 @@ smallest toolsize is beneficial.
 Here are some sample invocations of `oarchive`
 
 ```
+# Create an archive named output.oar in the current directory
+# containing two files.
 oarchive create --output-file=output.oar --verbose=true file1.txt file2.jpg
-oarchive extract --input-file=input.oar
-oarchive extract --input-file=input.oar --output-directory=/tmp/foo
+
+# List the names of all of the archive to stdout
 oarchive list --input-file=input.oar
-oarchive append --output-file=output.oar archive1.oar archive2.oar
+
+# Extract all files in the archive in file input.oar to the current
+# directory
+oarchive extract --input-file=input.oar
+
+# Extract all files in the archive in file input.oar to the /tmp/foo
+# directory.
+oarchive extract --input-file=input.oar --output-directory=/tmp/foo
+
+# Extract only files with exactly matching filenames to the directory
+# /tmp/foo
+oarchive extract --input-file=input.oar --output-directory=/tmp/foo file1 foo/file2
+
+# Extract will default to reading from stdin. (Can also use
+# --output-directory and limit it to only exactly matching file
+# paths).
 cat foo.oar | oarchive extract
+
+# Append one or more archive files.
+oarchive append --output-file=output.oar archive1.oar archive2.oar
 ```
 
 This is definitely not as terse as other tools though shell aliases,
@@ -201,7 +222,8 @@ is a huge plus.
 TODO(jawilson): determinism...
 
 Tools should be deterministic. There is not an easy to describe
-algorithm for this since many technique will work however
+algorithm for this since many technique will work. Sorting by
+filename, modification time, etc. would be one way to achieve this.
 
 so that it can be part of a
 "reproducible build". One way to do this would be to sort the header

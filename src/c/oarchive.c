@@ -95,6 +95,58 @@ string_tree_t* read_header(FILE* in) {
   return metadata;
 }
 
+/**
+ * @typedef
+ *
+ * Defines the callback type signature for stream_members (which is
+ * used for processing an archive while streaming it).
+ */
+typedef boolean_t (*stream_headers_callback_t)(string_tree_t* metadata,
+                                               int64_t size,
+                                               void* callback_data);
+
+void log_metadata(string_tree_t* metadata) {
+  log_info("Logging metadata");
+  if (should_log_info()) {
+    string_tree_foreach(metadata, key, value,
+                        { log_info("'%s' = '%s'", key, value.str); });
+  }
+}
+
+/**
+ * A callback based interface for processing an archive while streaming
+ * it.
+ */
+void stream_members(FILE* in, stream_headers_callback_t callback,
+                    void* callback_data) {
+  while (!file_eof(in)) {
+    string_tree_t* metadata = read_header(in);
+    log_metadata(metadata);
+    int64_t size = 0;
+    value_result_t size_value = string_tree_find(metadata, "size");
+    if (!is_ok(size_value)) {
+      log_warn("Encounterd a header without an explicit size.");
+    } else {
+      value_result_t data_size = string_parse_uint64_dec(size_value.str);
+      if (!is_ok(data_size)) {
+        log_fatal("Encounterd a header with an unparseable size %s",
+                  size_value.str);
+        fatal_error(ERROR_FATAL);
+      } else {
+        size = data_size.u64;
+      }
+    }
+
+    // ------------------------------------------------------------
+    boolean_t skip_data = callback(callback_data, size, metadata);
+    // ------------------------------------------------------------
+
+    if (skip_data && size > 0) {
+      log_info("Skipping %lu\n", size);
+      fseek(in, size, SEEK_CUR);
+    }
+  }
+}
 
 void create_command(command_line_parse_result_t args_and_files) {
   log_info("create_command");
@@ -116,54 +168,30 @@ void create_command(command_line_parse_result_t args_and_files) {
   }
 }
 
-void log_metadata(string_tree_t* metadata) {
-  log_info("Logging metadata");
-  if (should_log_info()) {
-    string_tree_foreach(metadata, key, value, {
-        log_info("'%s' = '%s'", key, value.str);
-      });
+boolean_t list_command_callback(string_tree_t* metadata, int64_t size,
+                                void* callback_data) {
+  value_result_t filename_value = string_tree_find(metadata, "filename");
+  if (is_ok(filename_value)) {
+    fprintf(stdout, "%s\n", filename_value.str);
+  } else {
+    fprintf(stdout, "%s\n", "<<member lacks filename>>");
   }
 }
 
 void list_command(command_line_parse_result_t args_and_files) {
   log_info("list_command");
-
   FILE* in = stdin;
 
   value_result_t input_filename_value
       = string_ht_find(args_and_files.flags, "input-file");
+
   if (is_ok(input_filename_value)) {
     log_info("opening %s", input_filename_value.str);
+    // TODO(jawilson): safe file_open instead.
     in = fopen(input_filename_value.str, "r");
   }
 
-  while (!file_eof(in)) {
-    string_tree_t* metadata = read_header(in);
-    log_metadata(metadata);
-
-    value_result_t size_value = string_tree_find(metadata, "size");
-    value_result_t filename_value = string_tree_find(metadata, "filename");
-
-    if (!is_ok(size_value)) {
-      log_fatal("Encounterd a header without an explicit size. It should at least be set to zero");
-      fatal_error(ERROR_FATAL);
-    }
-    value_result_t skip_amount = string_parse_uint64_dec(size_value.str);
-    if (!is_ok(skip_amount)) {
-      log_fatal("Encounterd a header with an illegal size");
-      fatal_error(ERROR_FATAL);
-    }
-    
-    if (is_ok(filename_value)) {
-      fprintf(stdout, "%s\n", filename_value.str);
-    } else {
-      fprintf(stdout, "%s\n", "<<member lacks filename>>");
-    }
-
-    log_info("Skipping %lu\n", skip_amount.u64);
-    fseek(in, skip_amount.i64, SEEK_CUR);
-    // TODO(jawilson): free_bytes(metadata);
-  }
+  stream_members(in, &list_command_callback, NULL);
 
   if (is_ok(input_filename_value)) {
     fclose(in);
