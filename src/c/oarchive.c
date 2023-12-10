@@ -101,7 +101,8 @@ string_tree_t* read_header(FILE* in) {
  * Defines the callback type signature for stream_members (which is
  * used for processing an archive while streaming it).
  */
-typedef boolean_t (*stream_headers_callback_t)(string_tree_t* metadata,
+typedef boolean_t (*stream_headers_callback_t)(FILE* input,
+                                               string_tree_t* metadata,
                                                int64_t size,
                                                void* callback_data);
 
@@ -137,9 +138,9 @@ void stream_members(FILE* in, stream_headers_callback_t callback,
       }
     }
 
-    // ------------------------------------------------------------
-    boolean_t skip_data = callback(callback_data, size, metadata);
-    // ------------------------------------------------------------
+    // ---------------------------------------------------------------
+    boolean_t skip_data = callback(in, metadata, size, callback_data);
+    // ---------------------------------------------------------------
 
     if (skip_data && size > 0) {
       log_info("Skipping %lu\n", size);
@@ -168,14 +169,15 @@ void create_command(command_line_parse_result_t args_and_files) {
   }
 }
 
-boolean_t list_command_callback(string_tree_t* metadata, int64_t size,
-                                void* callback_data) {
+boolean_t list_command_callback(FILE* input, string_tree_t* metadata,
+                                int64_t size, void* callback_data) {
   value_result_t filename_value = string_tree_find(metadata, "filename");
   if (is_ok(filename_value)) {
     fprintf(stdout, "%s\n", filename_value.str);
   } else {
     fprintf(stdout, "%s\n", "<<member lacks filename>>");
   }
+  return true;
 }
 
 void list_command(command_line_parse_result_t args_and_files) {
@@ -198,6 +200,40 @@ void list_command(command_line_parse_result_t args_and_files) {
   }
 }
 
+boolean_t extract_command_callback(FILE* input, string_tree_t* metadata,
+                                   int64_t size, void* callback_data) {
+  command_line_parse_result_t args_and_files
+      = *((command_line_parse_result_t*) callback_data);
+  value_result_t filename_value = string_tree_find(metadata, "filename");
+  if (is_ok(filename_value)) {
+    log_info("Extracting %s", filename_value.str);
+    FILE* output = fopen(filename_value.str, "w");
+    file_copy_stream(input, output, false, size);
+    fclose(output);
+  }
+  return false;
+}
+
+void extract_command(command_line_parse_result_t args_and_files) {
+  log_info("list_command");
+  FILE* in = stdin;
+
+  value_result_t input_filename_value
+      = string_ht_find(args_and_files.flags, "input-file");
+
+  if (is_ok(input_filename_value)) {
+    log_info("opening %s", input_filename_value.str);
+    // TODO(jawilson): safe file_open instead.
+    in = fopen(input_filename_value.str, "r");
+  }
+
+  stream_members(in, &extract_command_callback, &args_and_files);
+
+  if (is_ok(input_filename_value)) {
+    fclose(in);
+  }
+}
+
 int main(int argc, char** argv) {
   configure_fatal_errors((fatal_error_config_t){
       .catch_sigsegv = true,
@@ -214,6 +250,8 @@ int main(int argc, char** argv) {
     create_command(args_and_files);
   } else if (string_equal("list", args_and_files.command)) {
     list_command(args_and_files);
+  } else if (string_equal("extract", args_and_files.command)) {
+    extract_command(args_and_files);
   } else {
     fatal_error(ERROR_BAD_COMMAND_LINE);
   }
