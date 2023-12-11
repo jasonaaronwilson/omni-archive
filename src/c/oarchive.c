@@ -70,7 +70,7 @@ void configure_create_command() {
   flag_abbreviation("-o");
 }
 
-buffer_t* error = parse_command_file(false, argc, argv);
+buffer_t* error = flag_parse_command_line(false, argc, argv);
 if (error) {
   print_help(error);
   exit(1);
