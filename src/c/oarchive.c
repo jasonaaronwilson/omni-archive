@@ -11,6 +11,82 @@
 #define C_ARMYKNIFE_LIB_IMPL
 #include "c-armyknife-lib-no-lines.h"
 
+#if 0
+
+// Non thread-safe macro/builder pattern.
+
+enum over_write_t {
+  OVERWRITE_NO,
+  OVERWRITE_YES,
+  OVERWRITE_ASK
+};
+
+enum is_pipeline_t {
+  PIPELINE_NO,
+  PIPELINE_YES,
+  PIPELINE_AUTO,
+}
+
+boolean_t FLAG_verbose = 1;
+over_write_t FLAG_overwrite = OVERWRITE_NO;
+is_pipeline_t FLAG_is_pipeline = PIPELINE_AUTO;
+char* FLAG_output_file = NULL;
+
+void configure_command_line_parser() {
+  flag_program_name("oarchive");
+
+  flag_description("oarchive can create, list, extract, append to, or join archives in");
+  flag_description("the omni archive format (`.oar`).");
+
+  // Global Flags
+  flag_boolean("--verbose", &FLAG_verbose);
+  flag_description("When true, output more information useful for debugging");
+
+  flag_enum("--overwrite" &FLAG_overwrite);
+  flag_description("...");
+  flag_enum_boolean_values(OVERWRITE_NO, OVERWRITE_YES);
+  flag_enum_value("ask", OVERWRITE_ASK);
+
+  flag_enum("--is-pipeline", &FLAG_is_pipline);
+  flag_description("...");
+  flag_enum_boolean_values(PIPELINE_NO, PIPELINE_YES);
+  flag_enum_value("auto", PIPELINE_AUTO);
+
+  configure_create_command();
+  configure_list_command();
+  configure_extract_command();
+}
+
+void configure_create_command() {
+  flag_command("create");
+  flag_abbreviation("c");
+
+  flag_description("create an archive from the given files");
+  
+  flag_file_args(&FLAG_files);
+
+  flag_string("--output-file", &FLAG_output_file);
+  flag_abbreviation("--output");
+  flag_abbreviation("-o");
+}
+
+buffer_t* error = parse_command_file(false, argc, argv);
+if (error) {
+  print_help(error);
+  exit(1);
+}
+
+// TODO(jawilson): custom parsers...
+// flag_uint64();
+// flag_int64();
+// flag_custom();
+
+// Might not need right away...
+// flag_add_to_command()
+// flag_clear_command()
+
+#endif
+
 value_array_t* get_command_line_command_descriptors() {
   value_array_t* result = make_value_array(1);
   value_array_add(result, ptr_to_value(make_command_line_command_descriptor(
