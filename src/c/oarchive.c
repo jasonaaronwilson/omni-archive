@@ -188,7 +188,8 @@ void stream_members(FILE* in, stream_headers_callback_t callback,
 
     if (skip_data && size > 0) {
       log_info("Skipping %lu\n", size);
-      fseek(in, size, SEEK_CUR);
+      // fseek(in, size, SEEK_CUR);
+      file_skip_bytes(in, size);
     }
   }
 }
