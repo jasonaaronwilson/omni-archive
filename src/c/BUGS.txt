@@ -1,0 +1,5 @@
+1) a non existent input file for list errors out hard instead of
+nicely.
+
+2) a non exists directory to place a file into should error out nicely
+but seems to not be caught as an issue.

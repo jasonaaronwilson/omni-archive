@@ -4,7 +4,10 @@ build:
 	gcc -g -rdynamic -o oarchive $(realpath oarchive.c)
 
 clean:
-	rm -f oarchive *~
+	rm -rf oarchive *~ test-out
+
+test:
+	./test.sh
 
 format:
 	clang-format -i *.c
