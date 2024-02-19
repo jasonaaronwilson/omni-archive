@@ -11,129 +11,97 @@
 #define C_ARMYKNIFE_LIB_IMPL
 #include "c-armyknife-lib-no-lines.h"
 
-#if 0
+typedef enum { OVERWRITE_NO, OVERWRITE_YES, OVERWRITE_ASK } over_write_t;
 
-// Non thread-safe macro/builder pattern.
-
-enum over_write_t {
-  OVERWRITE_NO,
-  OVERWRITE_YES,
-  OVERWRITE_ASK
-};
-
+/*
 enum is_pipeline_t {
   PIPELINE_NO,
   PIPELINE_YES,
   PIPELINE_AUTO,
 }
+*/
 
 boolean_t FLAG_verbose = 1;
 over_write_t FLAG_overwrite = OVERWRITE_NO;
-is_pipeline_t FLAG_is_pipeline = PIPELINE_AUTO;
 char* FLAG_output_file = NULL;
+char* FLAG_input_file = NULL;
+value_array_t* FLAG_files = NULL;
+char* FLAG_command = NULL;
 
-void configure_command_line_parser() {
+void configure_create_command(void);
+void configure_list_command(void);
+void configure_extract_command(void);
+
+/*
+is_pipeline_t FLAG_is_pipeline = PIPELINE_AUTO;
+*/
+
+void configure_flags() {
   flag_program_name("oarchive");
 
-  flag_description("oarchive can create, list, extract, append to, or join archives in");
+  flag_description(
+      "oarchive can create, list, extract, append to, or join archives in");
   flag_description("the omni archive format (`.oar`).");
 
   // Global Flags
   flag_boolean("--verbose", &FLAG_verbose);
   flag_description("When true, output more information useful for debugging");
 
-  flag_enum("--overwrite" &FLAG_overwrite);
-  flag_description("...");
-  flag_enum_boolean_values(OVERWRITE_NO, OVERWRITE_YES);
+  flag_enum("--overwrite", (int*) &FLAG_overwrite);
+  flag_description("Controls whether files can be over written or not.");
+  flag_enum_value("no", OVERWRITE_NO);
+  flag_enum_value("yes", OVERWRITE_YES);
   flag_enum_value("ask", OVERWRITE_ASK);
 
+  /*
   flag_enum("--is-pipeline", &FLAG_is_pipline);
   flag_description("...");
   flag_enum_boolean_values(PIPELINE_NO, PIPELINE_YES);
   flag_enum_value("auto", PIPELINE_AUTO);
+  */
 
   configure_create_command();
   configure_list_command();
   configure_extract_command();
 }
 
-void configure_create_command() {
-  flag_command("create");
-  flag_abbreviation("c");
+void configure_create_command(void) {
+  flag_command("create", &FLAG_command);
+  flag_alias("c");
 
   flag_description("create an archive from the given files");
-  
+
   flag_file_args(&FLAG_files);
 
   flag_string("--output-file", &FLAG_output_file);
-  flag_abbreviation("--output");
-  flag_abbreviation("-o");
+  flag_alias("--output");
+  flag_alias("-o");
 }
 
-buffer_t* error = flag_parse_command_line(false, argc, argv);
-if (error) {
-  print_help(error);
-  exit(1);
+void configure_list_command(void) {
+  flag_command("list", &FLAG_command);
+  flag_alias("l");
+
+  flag_description("list the files in the given archive");
+
+  flag_file_args(&FLAG_files);
+
+  flag_string("--input-file", &FLAG_input_file);
+  flag_alias("--input");
+  flag_alias("-i");
 }
 
-// TODO(jawilson): custom parsers...
-// flag_uint64();
-// flag_int64();
-// flag_custom();
+void configure_extract_command(void) {
+  flag_command("extract", &FLAG_command);
+  flag_alias("x");
 
-// Might not need right away...
-// flag_add_to_command()
-// flag_clear_command()
+  flag_description("extract the file in the given archive");
 
-#endif
+  flag_file_args(&FLAG_files);
 
-value_array_t* get_command_line_command_descriptors() {
-  value_array_t* result = make_value_array(1);
-  value_array_add(result, ptr_to_value(make_command_line_command_descriptor(
-                              "create",
-                              "create an archive from the given files (but not "
-                              "directories currently")));
-  value_array_add(result,
-                  ptr_to_value(make_command_line_command_descriptor(
-                      "list", "list all the members that have a filename")));
-  value_array_add(
-      result,
-      ptr_to_value(make_command_line_command_descriptor(
-          "extract", "extract all of the members that have a filename")));
-  value_array_add(result, ptr_to_value(make_command_line_command_descriptor(
-                              "append", "combine archives")));
-  return result;
-}
-
-value_array_t* get_command_line_flag_descriptors() {
-  value_array_t* result = make_value_array(1);
-  value_array_add(
-      result,
-      ptr_to_value(make_command_line_flag_descriptor(
-          "input-file", command_line_flag_type_string,
-          "Specifies which archive to operate on for read operations")));
-  value_array_add(result,
-                  ptr_to_value(make_command_line_flag_descriptor(
-                      "output-file", command_line_flag_type_string,
-                      "Specifies the name of the archive output file name")));
-  value_array_add(
-      result,
-      ptr_to_value(make_command_line_flag_descriptor(
-          "output-directory", command_line_flag_type_string,
-          "Specifies the directory where to place the output results")));
-  return result;
-}
-
-command_line_parser_configuation_t* get_command_line_parser_config() {
-  command_line_parser_configuation_t* config
-      = malloc_struct(command_line_parser_configuation_t);
-  config->program_name = "oarchive";
-  config->program_description
-      = "This is the pure C version of the Omni Archive Tool (most similar to "
-        "ar or tar))";
-  config->command_descriptors = get_command_line_command_descriptors();
-  config->flag_descriptors = get_command_line_flag_descriptors();
-  return config;
+  flag_string("--input-file", &FLAG_input_file);
+  flag_alias("--input");
+  flag_alias("-i");
 }
 
 void append_header_and_file_contents(FILE* out, char* filename) {
@@ -225,22 +193,19 @@ void stream_members(FILE* in, stream_headers_callback_t callback,
   }
 }
 
-void create_command(command_line_parse_result_t args_and_files) {
+void create_command(void) {
   log_info("create_command");
 
   FILE* out = stdout;
-  value_result_t output_filename_value
-      = string_ht_find(args_and_files.flags, "output-file");
-  if (is_ok(output_filename_value)) {
-    out = fopen(output_filename_value.str, "w");
+  if (FLAG_output_file != NULL) {
+    out = fopen(FLAG_output_file, "w");
   }
 
-  for (int i = 0; i < args_and_files.files->length; i++) {
-    append_header_and_file_contents(
-        stdout, value_array_get(args_and_files.files, i).str);
+  for (int i = 0; i < FLAG_files->length; i++) {
+    append_header_and_file_contents(out, value_array_get(FLAG_files, i).str);
   }
 
-  if (is_ok(output_filename_value)) {
+  if (FLAG_output_file != NULL) {
     fclose(out);
   }
 }
@@ -256,30 +221,25 @@ boolean_t list_command_callback(FILE* input, string_tree_t* metadata,
   return true;
 }
 
-void list_command(command_line_parse_result_t args_and_files) {
+void list_command(void) {
   log_info("list_command");
   FILE* in = stdin;
 
-  value_result_t input_filename_value
-      = string_ht_find(args_and_files.flags, "input-file");
-
-  if (is_ok(input_filename_value)) {
-    log_info("opening %s", input_filename_value.str);
+  if (FLAG_input_file != NULL) {
+    log_info("opening %s", FLAG_input_file);
     // TODO(jawilson): safe file_open instead.
-    in = fopen(input_filename_value.str, "r");
+    in = fopen(FLAG_input_file, "r");
   }
 
   stream_members(in, &list_command_callback, NULL);
 
-  if (is_ok(input_filename_value)) {
+  if (FLAG_input_file != NULL) {
     fclose(in);
   }
 }
 
 boolean_t extract_command_callback(FILE* input, string_tree_t* metadata,
                                    int64_t size, void* callback_data) {
-  command_line_parse_result_t args_and_files
-      = *((command_line_parse_result_t*) callback_data);
   value_result_t filename_value = string_tree_find(metadata, "filename");
   if (is_ok(filename_value)) {
     log_info("Extracting %s", filename_value.str);
@@ -290,22 +250,18 @@ boolean_t extract_command_callback(FILE* input, string_tree_t* metadata,
   return false;
 }
 
-void extract_command(command_line_parse_result_t args_and_files) {
+void extract_command(void) {
   log_info("list_command");
   FILE* in = stdin;
-
-  value_result_t input_filename_value
-      = string_ht_find(args_and_files.flags, "input-file");
-
-  if (is_ok(input_filename_value)) {
-    log_info("opening %s", input_filename_value.str);
+  if (FLAG_input_file != NULL) {
+    log_info("opening %s", FLAG_input_file);
     // TODO(jawilson): safe file_open instead.
-    in = fopen(input_filename_value.str, "r");
+    in = fopen(FLAG_input_file, "r");
   }
 
-  stream_members(in, &extract_command_callback, &args_and_files);
+  stream_members(in, &extract_command_callback, NULL);
 
-  if (is_ok(input_filename_value)) {
+  if (FLAG_input_file != NULL) {
     fclose(in);
   }
 }
@@ -315,19 +271,27 @@ int main(int argc, char** argv) {
       .catch_sigsegv = true,
   });
   logger_init();
-  command_line_parse_result_t args_and_files
-      = parse_command_line(argc, argv, get_command_line_parser_config());
 
-  if (args_and_files.command == NULL) {
-    fatal_error(ERROR_BAD_COMMAND_LINE);
+  configure_flags();
+
+  char* error = flag_parse_command_line(argc, argv);
+  if (error) {
+    flag_print_help(stderr, error);
+    exit(1);
   }
 
-  if (string_equal("create", args_and_files.command)) {
-    create_command(args_and_files);
-  } else if (string_equal("list", args_and_files.command)) {
-    list_command(args_and_files);
-  } else if (string_equal("extract", args_and_files.command)) {
-    extract_command(args_and_files);
+  if (FLAG_command == NULL) {
+    // Technically this should not be reached because once a command
+    // is defined, a missing or wrong command should trigger an error
+    // and caught above. Note sure why this is still happening but
+    // paranoid code can be easier to debug.
+    fatal_error(ERROR_BAD_COMMAND_LINE);
+  } else if (string_equal("create", FLAG_command)) {
+    create_command();
+  } else if (string_equal("list", FLAG_command)) {
+    list_command();
+  } else if (string_equal("extract", FLAG_command)) {
+    extract_command();
   } else {
     fatal_error(ERROR_BAD_COMMAND_LINE);
   }
