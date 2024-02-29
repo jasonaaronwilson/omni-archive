@@ -40,8 +40,8 @@ void configure_flags() {
   flag_program_name("oarchive");
 
   flag_description(
-      "oarchive can create, list, extract, append to, or join archives in");
-  flag_description("the omni archive format (`.oar`).");
+      "oarchive can create, list, extract, append to, or join archives in the "
+      "omni archive format (`.oar`).");
 
   // Global Flags
   flag_boolean("--verbose", &FLAG_verbose);
@@ -76,6 +76,9 @@ void configure_create_command(void) {
   flag_string("--output-file", &FLAG_output_file);
   flag_alias("--output");
   flag_alias("-o");
+  flag_description(
+      "The destination for the created archive (stdout is used if "
+      "--output-file is not specified)");
 }
 
 void configure_list_command(void) {
@@ -89,6 +92,9 @@ void configure_list_command(void) {
   flag_string("--input-file", &FLAG_input_file);
   flag_alias("--input");
   flag_alias("-i");
+  flag_description(
+      "The input archive file path (stdin is used if --input-file is not "
+      "specified)");
 }
 
 void configure_extract_command(void) {
@@ -102,6 +108,9 @@ void configure_extract_command(void) {
   flag_string("--input-file", &FLAG_input_file);
   flag_alias("--input");
   flag_alias("-i");
+  flag_description(
+      "The input archive file path (stdin is used if --input-file is not "
+      "specified)");
 }
 
 void append_header_and_file_contents(FILE* out, char* filename) {
